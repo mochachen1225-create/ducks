@@ -212,7 +212,7 @@ canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch
 
   <div class="screen hidden" id="resultScr">
     <div class="card">
-      <div class="ribbon">回到農舍了！</div>
+      <div class="ribbon" id="rRibbon">回到農舍了！</div>
       <div class="bigcount"><b id="rCount">0</b><span>/ 15 隻</span></div>
       <div class="rtitle" id="rTitle"></div>
       <div class="grid" id="rGrid"></div>
@@ -244,6 +244,7 @@ const L = 6000;                     // river length (progress to the farm)
 const WF_START = L - 1150;          // waterfall zone (progress)
 const WF_END = L - 540;
 const WF_X = 314;                   // waterfall lip x
+const FORK_A = 2550, FORK_B = 3250; // river splits around an island (progress)
 const CUR = 24;                     // river current (units/s, downstream = +y)
 const MAMA_SPD = 150, DUCK_SPD = 190, GAP = 17;
 const N_DUCKS = 15;
@@ -260,11 +261,12 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = (R() *
 function hash(a, b) { let h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 
 /* ---------------- river geometry ---------------- */
+function forkWiden(p) { return 24 * smooth(FORK_A - 220, FORK_A, p) * (1 - smooth(FORK_B, FORK_B + 220, p)); }
 function bankL(y) {
   const p = -y;
   let b = 40 + 13 * Math.sin(p * 0.0034 + 1.3) + 7 * Math.sin(p * 0.0097 + 0.4);
   const k = smooth(WF_START - 300, WF_START - 60, p);
-  return b * (1 - k) + 48 * k;
+  return b * (1 - k) + 48 * k - forkWiden(p);
 }
 function bankR(y) {
   const p = -y;
@@ -272,8 +274,12 @@ function bankR(y) {
   const kIn = smooth(WF_START - 220, WF_START, p);
   const kOut = smooth(WF_END, WF_END + 190, p);
   b = b * (1 - kIn) + 376 * kIn;
-  return b * (1 - kOut) + 232 * kOut;
+  return b * (1 - kOut) + 232 * kOut + forkWiden(p);
 }
+// the island that splits the river into two channels
+function islandHW(y) { const p = -y; if (p < FORK_A || p > FORK_B) return 0; return (42 + 5 * Math.sin(p * 0.021)) * smooth(FORK_A, FORK_A + 150, p) * (1 - smooth(FORK_B - 150, FORK_B, p)); }
+function islandX(y) { return (bankL(y) + bankR(y)) / 2 + 6 * Math.sin(-y * 0.006); }
+function channel(y, side) { const c = islandX(y), hw = islandHW(y); return side < 0 ? [bankL(y), c - hw] : [c + hw, bankR(y)]; }
 function isWF(y) { const p = -y; return p > WF_START - 220 && p < WF_END + 190 && bankR(y) > WF_X + 2; }
 function wfK(y) { const p = -y; return smooth(WF_START - 280, WF_START - 30, p) * (1 - smooth(WF_END - 60, WF_END + 110, p)); }
 function riverR(y) { return isWF(y) ? WF_X - 40 : bankR(y); }  // usable right edge for placing things
@@ -714,6 +720,14 @@ function buildDeco() {
     for (let i = 0; i < 2; i++) add(FL[(R() * 5) | 0], rand(x0, 352), y + rand(-15, 15), 12, 12);
   }
   // start beach
+  for (let p = FORK_A + 120; p < FORK_B - 100; p += rand(26, 40)) {
+    const y = -p, c = islandX(y), hw = islandHW(y); if (hw < 18) continue;
+    const r = R();
+    if (r < .22) add('tree', c + rand(-8, 8), y + 20, 46, 56);
+    else if (r < .5) add('bush', c + rand(-12, 12), y, 30, 20);
+    else add(FL[(R() * 5) | 0], c + rand(-hw + 10, hw - 10), y, 12, 12);
+    if (R() < .6) add('reed', c + (R() < .5 ? -1 : 1) * (hw - 3), y + 6, 16, 32);
+  }
   add('nest', 286, 120, 48, 28); add('reed', 18, 70, 20, 40); add('reed', 342, 74, 20, 40); add('reed', 330, 92, 18, 36);
   add('flP', 54, 150, 12, 12); add('flY', 300, 168, 12, 12); add('flB', 30, 120, 12, 12); add('bush', 330, 190, 36, 24); add('bush', 24, 200, 36, 24);
   add('tree', 316, 250, 56, 68); add('tree', 40, 280, 56, 68);
@@ -734,8 +748,10 @@ function newGame() {
     mama: { x: 180, y: -24, vx: 0, vy: 0, face: 1, quack: 0, expr: 'normal', exprT: 0, bob: 0, id: 99 },
     ducks: [], line: [], trail: [], hazards: [], sched: buildSchedule(), si: 0, lastSpawn: -9,
     floats: [], parts: [], bubbles: [], idle: 0, gather: false, wasGather: false, eagleCD: 4,
-    stats: { rescues: 0, gone: [], time: 0 }, wfWarn: false, wfFallWarn: false, deco: buildDeco(), hintT: 0
+    stats: { rescues: 0, gone: [], time: 0 }, wfWarn: false, wfFallWarn: false, deco: buildDeco(), hintT: 0,
+    static: [], forkSide: R() < .5 ? -1 : 1, forkWarn: false, mamaFall: false, mfT: 0
   };
+  G.static = [new ForkRapids(G.forkSide), new ForkRocks(-G.forkSide)];
   for (let k = 0; k < 60; k++) G.trail.push({ x: 180, y: -24 + k * 6 });
   for (let i = 0; i < N_DUCKS; i++) {
     const d = {
@@ -786,9 +802,35 @@ function rejoin(d) {
   if (freed) float(d.x, d.y - 40, '解開了！', '#3f8f55', null, 12);
   burst(d.x, d.y - 8, 'heart', 5, 50); Snd.chime(); buzz(15); G.stats.rescues++; bumpHud();
 }
+function startMamaFall() {
+  const m = G.mama;
+  G.mamaFall = true; G.mfT = 0; G.hazards = []; pointer.down = false;
+  m.state = 'falling'; m.fall = 0; setExpr(m, 'wow', 99); m.quack = 0.45;
+  float(m.x - 10, m.y - 44, '咦？', '#376f96', null, 18, 1.6);
+  Snd.quack(0.9, 1); Snd.splash(.5); buzz([80, 60, 140]);
+  G.line.forEach((d, i) => { d.jumpT = 0.45 + i * 0.13; });
+  $('#hint').classList.add('hidden');
+}
+function updateMamaFall(dt) {
+  const m = G.mama;
+  G.mfT += dt;
+  if (m.fall < 0.9) { m.fall = Math.min(0.9, m.fall + dt * 0.8); m.x += 55 * dt; m.y += 8 * dt; }
+  // the kids happily follow mama right over the edge
+  for (const d of G.line.slice()) {
+    d.jumpT -= dt;
+    if (d.jumpT <= 0) { G.line.splice(G.line.indexOf(d), 1); d.state = 'falling'; d.fall = 0; setExpr(d, 'wow', 9); burst(d.x, d.y, 'drop', 3, 50); Snd.plop(); bumpHud(); }
+  }
+  pushTrail();
+  updateDucks(dt);
+  if (G.mfT > 1.6 && !G.endShown) { G.endShown = true; Snd.sad(); }
+  if (G.mfT > 4.4 && !G.ended) { G.ended = true; G.saved = 0; showResult(); }
+  const ty = m.y - VH * 0.6; camY += (ty - camY) * Math.min(1, dt * 4); clampCam();
+  updateFx(dt); G.hintT = 0;
+}
 function startFall(d) {
   const i = G.line.indexOf(d); const was = i >= 0; if (was) G.line.splice(i, 1);
   d.state = 'falling'; d.fall = 0; setExpr(d, 'wow', 9);
+  if (G.mamaFall) return;
   float(d.x - 20, d.y - 18, was ? '-1' : '…', '#d9534f', 'duck_sad');
   G.stats.gone.push(d.name); Snd.sad(); Snd.splash(.3); buzz([40, 40, 60]); bumpHud();
   if (!G.wfFallWarn) { G.wfFallWarn = true; toast('icoFall', '有小鴨被沖下瀑布了…靠左一點！', true); }
@@ -835,17 +877,23 @@ function envForce(o, isMama) {
     fx += k * (isMama ? 36 : 42 + li * 4.5);
     if (!isMama) fx += k * Math.sin(G.t * 3.1 + (o.id || 0) * 1.9) * 28;
   }
+  for (const h of G.static) if (h.force) { const f = h.force(o, isMama); fx += f[0]; fy += f[1]; }
   for (const h of G.hazards) if (h.force) { const f = h.force(o, isMama); fx += f[0]; fy += f[1]; }
   return [fx, fy];
 }
-function collideSolids(o, r, isMama) { let hit = false; for (const h of G.hazards) if (h.collide && h.collide(o, r, isMama)) hit = true; return hit; }
+function collideSolids(o, r, isMama) { let hit = false; for (const h of G.static) if (h.collide && h.collide(o, r, isMama)) hit = true; for (const h of G.hazards) if (h.collide && h.collide(o, r, isMama)) hit = true; return hit; }
 function clampBanks(o, r, isMama) {
   if (o.y >= 52 || o.y <= -L) { o.x = clamp(o.x, 10, W - 10); return; }
   const bl = bankL(o.y);
   if (o.x < bl + r) { o.x = bl + r; if (o.vx < 0) o.vx *= -0.2; }
+  const hw = islandHW(o.y);
+  if (hw > 2) {
+    const c = islandX(o.y);
+    if (Math.abs(o.x - c) < hw + r) { o.x = o.x < c ? c - hw - r : c + hw + r; o.vx *= -0.2; }
+  }
   const wf = isWF(o.y);
-  if (wf && !isMama) return;
-  const lim = wf ? WF_X - r - (isMama ? 46 : 6) : bankR(o.y) - r;
+  if (wf) return;   // nothing stops you at the waterfall lip — not even mama
+  const lim = bankR(o.y) - r;
   if (o.x > lim) { o.x = lim; if (o.vx > 0) o.vx *= -0.2; }
 }
 
@@ -1384,6 +1432,49 @@ function drawNet(x, y, r) {
   for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 + G.t; ctx.beginPath(); ctx.arc(x + Math.cos(a) * r, y + Math.sin(a) * r, 2, 0, Math.PI * 2); ctx.fill(); }
 }
 
+/* the fork: one channel is a long, furious rapid; the other is calm but crowded with rocks */
+class ForkRapids extends Rapids {
+  constructor(side) { super(0.5); this.side = side; this.y2 = -FORK_A - 60; this.y1 = -FORK_B + 60; this.h = this.y2 - this.y1; this.calm = -side; this.amp = 105; }
+  span(y) { const [a, b] = channel(y, this.side); return this.side < 0 ? [a - 2, b + 1] : [a - 1, b + 2]; }
+  rough(o) {
+    if (o.y < this.y1 || o.y > this.y2) return 0;
+    const [a, b] = channel(o.y, this.side); if (o.x < a - 4 || o.x > b + 4) return 0;
+    return Math.min(1, (o.y - this.y1) / 50, (this.y2 - o.y) / 50);
+  }
+  force(o, isMama) {
+    const r = this.rough(o); if (r <= 0) return Z;
+    o._rough = Math.max(o._rough || 0, r * 0.4);
+    const tur = Math.sin(G.t * 4.6 + o.y * 0.05 + this.seed + (o.id || 0) * 1.7) * 0.7 + Math.sin(G.t * 8.1 + o.x * 0.06) * 0.3;
+    return [tur * (isMama ? 28 : this.amp) * r, 52 * r];   // the whole family is slowed equally; the danger is the sideways tossing
+  }
+}
+class ForkRocks extends Rocks {
+  constructor(side) {
+    super(0); this.side = side; this.rocks = [];
+    let g = 0;
+    for (let p = FORK_A + 170; p < FORK_B - 140; p += 58) {
+      const y = -p + rand(-6, 6), [a, b] = channel(y, side), w = b - a, gw = 50;
+      const gc = a + gw / 2 + 8 + [.1, .9, .5, .1, .9][g++ % 5] * (w - gw - 16);
+      for (let x = a + 12; x < b - 6; x += rand(26, 32)) {
+        if (Math.abs(x - gc) < gw / 2 + 10) continue;
+        this.rocks.push({ x: x + rand(-3, 3), y: y + rand(-7, 7), r: rand(12, 15), n: ['rock1', 'rock2', 'rock3', 'rock2', 'rock1', 'rock4'][(R() * 6) | 0], f: R() < .5 ? 1 : -1, ph: R() * 6 });
+      }
+    }
+  }
+  drawUnder() { const t = this.rocks; this.rocks = t.filter(k => k.y > camY - 40 && k.y < camY + VH + 40); super.drawUnder(); this.rocks = t; }
+  drawMain() { const t = this.rocks; this.rocks = t.filter(k => k.y > camY - 40 && k.y < camY + VH + 40); super.drawMain(); this.rocks = t; }
+}
+function drawIsland(top, bot) {
+  const y0 = Math.max(top, -FORK_B), y1 = Math.min(bot, -FORK_A);
+  if (y1 <= y0) return;
+  const L1 = [], R1 = [];
+  for (let y = Math.floor(y0 / 9) * 9; y <= y1 + 9; y += 9) { const hw = islandHW(y), c = islandX(y); if (hw < 0.5) continue; L1.push([c - hw - tear(y, 3), y]); R1.push([c + hw + tear(y, 4), y]); }
+  if (L1.length < 2) return;
+  const path = () => { ctx.beginPath(); for (const [x, y] of L1) ctx.lineTo(x, y); for (let i = R1.length - 1; i >= 0; i--) ctx.lineTo(R1[i][0], R1[i][1]); ctx.closePath(); };
+  ctx.save(); ctx.translate(2, 3); path(); ctx.fillStyle = COL.shadow; ctx.fill(); ctx.restore();
+  path(); ctx.fillStyle = COL.grass; ctx.fill(); grain();
+  ctx.strokeStyle = COL.edge; ctx.lineWidth = 2.6; ctx.lineJoin = 'round'; ctx.stroke();
+}
 const HZ = { rocks: Rocks, eagle: Eagle, rapids: Rapids, logs: Logs, whirl: Whirl, carp: Carp, boat: Boat, kid: Kid, bag: Bags, fisher: Fisher };
 const HZ_TXT = {
   rocks: ['rock1', '前方有石頭，轉彎別太急！'],
@@ -1430,6 +1521,8 @@ function update(dt) {
   m.x += (m.vx * slow + fm[0]) * dt; m.y += (m.vy * slow + fm[1] + cur(m)) * dt;
   if (!G.landing) { collideSolids(m, 13, true); clampBanks(m, 14, true); m.y = Math.min(m.y, 30); }
   if (Math.abs(m.vx) > 30) m.face = m.vx > 0 ? 1 : -1;
+  if (!G.landing && !G.mamaFall && isWF(m.y) && m.x > WF_X) startMamaFall();
+  if (G.mamaFall) { updateMamaFall(dt); return; }
 
   // idle / gather
   if (G.started && !G.landing) { if (!pointer.down) G.idle += dt; else G.idle = 0; }
@@ -1447,7 +1540,9 @@ function update(dt) {
     const p = -m.y, diff = diffAt();
     const maxA = diff < 0.4 ? 1 : 2;
     const nxt = G.sched[G.si];
-    if (nxt && p > WF_START - 880) G.si = G.sched.length;  // keep the run-up to the waterfall clear
+    if (!G.forkWarn && p > FORK_A - 420) { G.forkWarn = true; toast('icoWave', `河道分岔！${G.forkSide < 0 ? '左' : '右'}邊超級湍急，${G.forkSide < 0 ? '右' : '左'}邊石頭超多，選一邊！`, true); Snd.alert(); }
+    if (nxt && p > FORK_A - 780 && p < FORK_B + 60 && nxt.p < FORK_B + 60) G.si++;   // the fork is its own challenge (and nothing may spill into it)
+    else if (nxt && p > WF_START - 880) G.si = G.sched.length;  // keep the run-up to the waterfall clear
     else if (nxt && p >= nxt.p && G.hazards.length < maxA && G.t - G.lastSpawn > 1.6) { spawnHazard(nxt.type, diff); G.si++; }
     G.eagleCD -= dt;
     if (G.idle > 2.8 && G.eagleCD <= 0 && G.line.length && G.hazards.length < 2 && !G.hazards.some(h => h.type === 'eagle') && p > 200 && p < WF_START - 100) {
@@ -1608,10 +1703,13 @@ function render() {
   drawWaterfall(top, bot);
   drawWaterTex(top, bot);
   drawShores(top, bot);
+  drawIsland(top, bot);
   for (const d of G.deco) if (d.layer === 'water' && d.y > top - 30 && d.y < bot + 30) drawDeco(d);
+  for (const h of G.static) if (h.drawUnder) h.drawUnder();
   for (const h of G.hazards) if (h.drawUnder) h.drawUnder();
   for (const d of G.deco) if (d.layer === 'land' && d.y > top - 40 && d.y < bot + 80) drawDeco(d);
   drawLandmarks(top, bot);
+  for (const h of G.static) if (h.drawMain) h.drawMain();
   for (const h of G.hazards) if (h.drawMain) h.drawMain();
 
   const ents = G.ducks.filter(d => d.state === 'follow' || d.state === 'lost' || d.state === 'lured' || d.state === 'tangled' || d.state === 'spin' || d.state === 'falling');
@@ -1620,6 +1718,21 @@ function render() {
   for (const h of G.hazards) if (h.drawOver) h.drawOver();
 
   drawParts(); drawFloats(); drawIndicators(); drawIdleHint();
+  if (G.mamaFall && G.mfT > 1.5) drawTheEnd(clamp((G.mfT - 1.5) / 0.6, 0, 1));
+}
+function drawTheEnd(u) {
+  const word = 'THE END', cols = [C.red, C.mus, C.teal, null, C.blue, C.green, C.red], cx = W / 2, cy = camY + VH * 0.4;
+  ctx.save(); ctx.globalAlpha = u;
+  for (let i = 0; i < word.length; i++) {
+    if (word[i] === ' ') continue;
+    const x = cx + (i - 3) * 41, d = clamp(u * 1.6 - i * 0.08, 0, 1), y = cy + (1 - d) * -40 + Math.sin(G.t * 3 + i) * 2, rot = (hash(i, 9) - .5) * 0.3;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalAlpha = u * d;
+    ctx.fillStyle = 'rgba(58,42,32,.28)'; rrect(-19, -21, 40, 46, 7); ctx.fill();
+    ctx.fillStyle = cols[i]; rrect(-21, -24, 40, 46, 7); ctx.fill(); grain();
+    ctx.fillStyle = C.cream; ctx.font = `400 30px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(word[i], -1, 0);
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 function drawGrass(top, bot) {
@@ -1754,6 +1867,11 @@ function drawLandmarks(top, bot) {
       ctx.globalAlpha = 1 - u; spr('heart', x, y, 10 + u * 8, 9 + u * 7); ctx.globalAlpha = 1;
     }
     spr('sign', 248, fy - 28, 46, 42); signText('家', 248, fy - 37, 14);
+  }
+  const fy2 = -(FORK_A + 175);
+  if (fy2 > top - 50 && fy2 < bot + 50) {
+    const c = islandX(fy2), rl = G.forkSide < 0;
+    spr('sign', c, fy2, 66, 50); signText(rl ? '←急流' : '←石頭', c, fy2 - 14, 10, rl ? C.red2 : INK); signText(rl ? '石頭→' : '急流→', c, fy2 - 2, 10, rl ? INK : C.red2);
   }
   const wy = -(WF_START - 300);
   if (wy > top - 40 && wy < bot + 40) { spr('sign', bankL(wy) - 2, wy, 46, 42); signText('←安全', bankL(wy) - 2, wy - 9, 11); }
@@ -1898,17 +2016,21 @@ function fmtTime(s) { s = Math.round(s); return Math.floor(s / 60) + ':' + Strin
 function showResult() {
   mode = 'end'; Snd.music(false); Snd.setRumble(0);
   const n = G.saved, best = store.get('duckHome.best', null);
-  const isNew = !best || n > best.n || (n === best.n && G.stats.time < best.time);
+  const isNew = !G.mamaFall && (!best || n > best.n || (n === best.n && G.stats.time < best.time));
   if (isNew) store.set('duckHome.best', { n, time: G.stats.time });
-  const b = store.get('duckHome.best', { n, time: G.stats.time });
-  $('#rCount').textContent = n; $('#rTitle').textContent = titleFor(n);
+  const b = store.get('duckHome.best', null);
+  const fell = G.mamaFall;
+  $('#rRibbon').textContent = fell ? 'THE END' : '回到農舍了！';
+  $('#rRibbon').style.backgroundColor = fell ? 'var(--red)' : '';
+  $('#rCount').textContent = n; $('#rTitle').textContent = fell ? '喔喔～是沒在看路嗎？' : titleFor(n);
   const saved = new Set(G.line.map(d => d.id));
   const order = G.ducks.slice().sort((a, c) => (saved.has(c.id) - saved.has(a.id)));
   $('#rGrid').innerHTML = order.map((d, i) => duckImgHTML(d.acc, saved.has(d.id) ? 'happy' : 'sad', 0, saved.has(d.id) ? '' : 'lost').replace('style=""', `style="animation-delay:${i * 0.04}s"`)).join('');
   const miss = G.ducks.filter(d => !saved.has(d.id)).map(d => d.name);
-  $('#rMissing').textContent = miss.length ? `沒跟回家的：${miss.join('、')}` : '大家都平安到家，今晚加菜！';
+  $('#rMissing').textContent = fell ? '鴨媽媽帶著全家一起坐了瀑布溜滑梯……下次記得靠左邊的小水道！'
+    : miss.length ? `沒跟回家的：${miss.join('、')}` : '大家都平安到家，今晚加菜！';
   $('#rStats').innerHTML = `<span>用時 ${fmtTime(G.stats.time)}</span><span>救回 ${G.stats.rescues} 次</span><span>被帶走 ${G.stats.gone.length} 隻</span>`;
-  $('#rBest').innerHTML = `最佳紀錄：${b.n} 隻（${fmtTime(b.time)}）${isNew ? '<span class="newrec">新紀錄！</span>' : ''}`;
+  $('#rBest').innerHTML = b ? `最佳紀錄：${b.n} 隻（${fmtTime(b.time)}）${isNew ? '<span class="newrec">新紀錄！</span>' : ''}` : '最佳紀錄：還沒有，平安到家才算喔';
   $('#hud').classList.add('hidden');
   showScreen('#resultScr');
   if (n === 15) burstConfetti();
@@ -1931,7 +2053,8 @@ function resumeGame() { paused = false; showScreen(null); Snd.music(true); last 
 async function share() {
   const n = G ? G.saved : 0;
   const url = location.href.split('?')[0].split('#')[0];
-  const text = `我在《鴨媽媽回家》帶了 ${n}/15 隻小鴨回家！\n稱號：「${titleFor(n)}」\n你能一隻都不少嗎？`;
+  const text = G && G.mamaFall ? `我在《鴨媽媽回家》帶著全家衝下瀑布了……\n「喔喔～是沒在看路嗎？」\n你能平安到家嗎？`
+    : `我在《鴨媽媽回家》帶了 ${n}/15 隻小鴨回家！\n稱號：「${titleFor(n)}」\n你能一隻都不少嗎？`;
   if (navigator.share) { try { await navigator.share({ title: '鴨媽媽回家', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
   const full = text + '\n' + url;
   let ok = false;
