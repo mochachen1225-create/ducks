@@ -2423,7 +2423,7 @@ function frame(now) {
   await buildSprites();
   $('#hudDuck').src = URLS.duck_happy; $('#hudDuckAcc').src = URLS.acc_bow;
   $('#progMama').src = URLS.mama_normal;
-  $('#progHouse').src = svgURL(SV('0 0 40 36', `<path d="M3 18 L20 3 L37 18Z" fill="${C.red}"/><rect x="8" y="16" width="24" height="18" fill="${C.kraft}"/><path d="M17 34 L17 25 Q20 21 23 25 L23 34Z" fill="${C.teal}"/><path d="M20 15 C17 13 16.5 12 16.5 11 C16.5 10 17.3 9.3 18.2 9.3 C19 9.3 19.6 9.8 20 10.4 C20.4 9.8 21 9.3 21.8 9.3 C22.7 9.3 23.5 10 23.5 11 C23.5 12 23 13 20 15Z" fill="#fff"/>`));
+  $('#progHouse').src = svgURL(SV('0 0 40 36', `<path d="M3 17 L9 8 L20 4 L31 8 L37 17Z" fill="#9d2f2b" stroke="${C.cream}" stroke-width="1.6" stroke-linejoin="round"/><rect x="6" y="16" width="28" height="18" fill="${C.red}"/><rect x="14" y="21" width="12" height="13" fill="#c4443f" stroke="${C.cream}" stroke-width="1.6"/><path d="M15 22 L25 33 M25 22 L15 33" stroke="${C.cream}" stroke-width="1.6"/><path d="M20 4 L20 0" stroke="${INK}" stroke-width="1.2"/>`));
   $('#lostImg').src = URLS.duck_sad;
   $('#howA').src = URLS.mama_happy; $('#howB').src = URLS.eagle; $('#howC').src = URLS.duck_sad; $('#howD').src = URLS.icoFall;
   const logo = mamaImgHTML('happy', 72) + duckImgHTML('bow', 'happy', 42) + duckImgHTML('party', 'normal', 42) + duckImgHTML('glasses', 'happy', 42);
