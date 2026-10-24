@@ -1843,13 +1843,20 @@ function drawWaterTex(top, bot) {
       else { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.arc(x, y, 1.6 + h * 9, 0, Math.PI * 2); ctx.fill(); }
     }
   }
-  const k0 = Math.max(top, -(WF_END + 100)), k1 = Math.min(bot, -(WF_START - 260));
+  // waterfall pull: chevrons anchored to the water, drifting downstream and gliding toward the lip
+  const k0 = Math.max(top, -(WF_END + 120)), k1 = Math.min(bot, -(WF_START - 280));
   if (k1 > k0) {
-    for (let i = 0; i < 16; i++) {
-      const y = k0 + hash(i, 21) * (k1 - k0), kk = wfK(y); if (kk < 0.2) continue;
-      const span = WF_X - bankL(y); if (span < 30) continue;
-      const x = bankL(y) + ((hash(i, 23) * span + G.t * 70 * kk) % span);
-      crayon(() => { ctx.moveTo(x - 9, y); ctx.lineTo(x + 9, y); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x + 9, y); ctx.lineTo(x + 4, y + 4); }, '#fff', 2, kk * 0.85 * Math.sin(Math.PI * (x - bankL(y)) / span));
+    const rh = 46, vy = CUR, off = (G.t * vy) % rh, base = Math.floor(G.t * vy / rh);
+    for (let gy = Math.floor((k0 - off) / rh); gy * rh + off < k1; gy++) {
+      const id = gy - base, y = gy * rh + off + hash(id, 41) * 14, kk = wfK(y);
+      if (kk < 0.25 || y < k0 || y > k1) continue;
+      const left = bankL(y) + 14, span = WF_X - 22 - left; if (span < 40) continue;
+      for (let j = 0; j < 2; j++) {
+        const u = (hash(id, 43 + j) + G.t * 0.22 * kk) % 1;      // 0 → 1 across, then fades out before restarting
+        const x = left + u * span, a = kk * 0.8 * Math.min(1, u * 5) * Math.min(1, (1 - u) * 5);
+        if (a <= 0.02) continue;
+        crayon(() => { ctx.moveTo(x - 5, y - 5); ctx.lineTo(x + 1, y); ctx.lineTo(x - 5, y + 5); ctx.moveTo(x + 3, y - 5); ctx.lineTo(x + 9, y); ctx.lineTo(x + 3, y + 5); }, '#fff', 2.2, a);
+      }
     }
   }
 }
