@@ -507,6 +507,13 @@ function buildSprites() {
     <path d="M30 26 L48 46" stroke="#7c8aa3" stroke-width="1.8"/>
     <circle cx="48" cy="46" r="6.4" fill="${C.cream}"/><path d="M41.6 46 A6.4 6.4 0 0 1 54.4 46Z" fill="${C.red}"/>`, { seed: 73, border: 0, wob: 1.4 }), 26, 26);
 
+  add('bottle', P('0 0 60 60', `
+    <g transform="rotate(-35 30 30)"><rect x="22" y="14" width="16" height="36" rx="6" fill="#bfe3f2" fill-opacity=".92"/><rect x="25.5" y="8" width="9" height="8" rx="2" fill="#bfe3f2"/>
+    <rect x="25" y="4" width="10" height="5" rx="1.5" fill="${C.teal}"/><rect x="22" y="26" width="16" height="10" fill="${C.red}"/>
+    <path d="M26 17 L26 46" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".7"/></g>`, { seed: 74 }), 26, 26);
+  add('can', P('0 0 60 60', `
+    <g transform="rotate(25 30 30)"><rect x="20" y="14" width="20" height="32" rx="4" fill="${C.red}"/><rect x="20" y="12" width="20" height="6" rx="3" fill="#d9d4cc"/><rect x="20" y="42" width="20" height="5" rx="2.5" fill="#d9d4cc"/>
+    <path d="M24 24 Q30 30 36 24" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M23.5 20 L23.5 40" stroke="#fff" stroke-width="1.6" opacity=".5" stroke-linecap="round"/></g>`, { seed: 75 }), 24, 24);
   add('fisher', P('0 0 80 126', `<rect x="37" y="86" width="6" height="40" rx="2" fill="#e3c28f"/>
     <path d="M20 56 Q40 45 60 56 L62 86 Q40 92 18 86Z" fill="${C.cream}"/>
     <path d="M24 56 Q40 49 56 56 L57 84 Q40 89 23 84Z" fill="${C.green}"/>
@@ -686,7 +693,7 @@ function buildSchedule() {
   const TYPES = ['rocks', 'eagle', 'rapids', 'logs', 'whirl', 'carp', 'boat', 'kid', 'bag', 'fisher'];
   const EASY = ['rocks', 'logs', 'bag', 'kid', 'whirl'];
   let bag = [];
-  const list = []; let p = 520, last = null;
+  const list = []; let p = 230, last = null;
   const end = WF_START - 950;
   let first = true;
   while (p < end) {
@@ -699,7 +706,7 @@ function buildSchedule() {
       if ((t === last || (list.length > 1 && list[list.length - 2].type === t)) && bag.length) { const u = bag.pop(); bag.unshift(t); t = u; }
     }
     list.push({ p, type: t }); last = t;
-    p += lerp(520, 250, f) * rand(0.85, 1.15);
+    p += lerp(400, 240, f) * rand(0.85, 1.15);
   }
   return list;
 }
@@ -768,7 +775,7 @@ function newGame() {
     stats: { rescues: 0, gone: [], time: 0 }, wfWarn: false, wfFallWarn: false, deco: buildDeco(), hintT: 0,
     static: [], forkSide: R() < .5 ? -1 : 1, forkWarn: false, mamaFall: false, mfT: 0
   };
-  G.static = [new ForkRapids(G.forkSide), new ForkRocks(-G.forkSide)];
+  G.static = [new ForkRapids(G.forkSide), new ForkRocks(-G.forkSide), new Litter()];
   for (let k = 0; k < 60; k++) G.trail.push({ x: 180, y: -24 + k * 6 });
   for (let i = 0; i < N_DUCKS; i++) {
     const d = {
@@ -1338,23 +1345,26 @@ class Kid {
 class Bags {
   constructor(diff) {
     this.type = 'bag'; this.items = [];
-    const n = diff < 0.45 ? 1 : 2;
-    for (let i = 0; i < n; i++) {
-      const y = camY - 40 - i * 150, bl = bankL(y), br = riverR(y);
-      this.items.push({ x: rand(bl + 35, br - 35), y, vy: rand(30, 42), ph: R() * 6, kind: R() < .55 ? 'bag' : 'fline' });
-    }
+    const n = diff < 0.45 ? 3 : 4;
+    for (let i = 0; i < n; i++) this.add(camY - 40 - i * 90);
   }
+  add(y) {
+    const bl = bankL(y), br = riverR(y);
+    const it = { x: rand(bl + 30, br - 30), y, vy: rand(30, 44), ph: R() * 6, kind: TRASH[(R() * TRASH.length) | 0] };
+    this.keepOffIsland(it); this.items.push(it);
+  }
+  keepOffIsland(it) { const hw = islandHW(it.y); if (hw > 2) { const c = islandX(it.y); if (Math.abs(it.x - c) < hw + 10) it.x = it.x < c ? c - hw - 10 : c + hw + 10; } }
   update(dt) {
     const m = G.mama;
     for (const it of this.items) {
       it.y += it.vy * dt; it.x += Math.sin(G.t * 1.3 + it.ph) * 16 * dt;
-      it.x = clamp(it.x, bankL(it.y) + 12, Math.min(riverR(it.y), WF_X) - 12);
+      it.x = clamp(it.x, bankL(it.y) + 12, Math.min(riverR(it.y), WF_X) - 12); this.keepOffIsland(it);
       const dm = hyp(m.x - it.x, m.y - it.y);
       if (dm < 30 && dm > 0.01) { it.x -= (m.x - it.x) / dm * (30 - dm); it.y -= (m.y - it.y) / dm * (30 - dm); }
       for (const d of G.ducks) {
         if (it.gone || !(d.state === 'follow' || d.state === 'lost' || d.state === 'lured')) continue;
         if (hyp(d.x - it.x, d.y - it.y) < 16) {
-          detach(d, 'tangled', it.kind === 'bag' ? '被塑膠袋纏住了' : '被釣魚線纏住了');
+          detach(d, 'tangled', TRASH_TXT[it.kind]);
           if (d.bread) { d.bread.duck = null; d.bread = null; }
           d.bag = it.kind; it.gone = true; Snd.splash(.15);
         }
@@ -1362,7 +1372,7 @@ class Bags {
       if (it.y > camY + VH + 40) it.gone = true;
     }
     this.items = this.items.filter(i => !i.gone);
-    if (!this.items.length) this.done = true;
+    if (!this.items.length && !this.ambient) this.done = true;
   }
   drawMain() {
     for (const it of this.items) {
@@ -1372,6 +1382,20 @@ class Bags {
   }
 }
 
+const TRASH = ['bag', 'fline', 'bottle', 'can'];
+const TRASH_TXT = { bag: '被塑膠袋纏住了', fline: '被釣魚線纏住了', bottle: '被寶特瓶卡住了', can: '被鐵罐卡住了' };
+// litter that keeps drifting down the whole river, on top of the scheduled hazards
+class Litter extends Bags {
+  constructor() { super(0); this.items = []; this.ambient = true; this.cd = 1.5; }
+  update(dt) {
+    const p = -G.mama.y;
+    if (G.started && !G.landing && p > 60 && p < WF_START - 350) {
+      this.cd -= dt;
+      if (this.cd <= 0) { this.cd = lerp(3.4, 2.0, clamp(p / WF_START, 0, 1)) * rand(0.7, 1.3); this.add(camY - 30); }
+    }
+    super.update(dt);
+  }
+}
 class Fisher {
   constructor(diff) {
     this.type = 'fisher'; this.side = R() < .5 ? -1 : 1; this.y = camY - 40;
@@ -1492,6 +1516,8 @@ function drawIsland(top, bot) {
   path(); ctx.fillStyle = COL.grass; ctx.fill(); grain();
   ctx.strokeStyle = COL.edge; ctx.lineWidth = 2.6; ctx.lineJoin = 'round'; ctx.stroke();
 }
+// hazards that occupy a stretch of river never overlap each other (rocks inside rapids is just cruel)
+const SPATIAL = new Set(['rocks', 'rapids', 'logs', 'whirl']);
 const HZ = { rocks: Rocks, eagle: Eagle, rapids: Rapids, logs: Logs, whirl: Whirl, carp: Carp, boat: Boat, kid: Kid, bag: Bags, fisher: Fisher };
 const HZ_TXT = {
   rocks: ['rock1', '前方有石頭，轉彎別太急！'],
@@ -1502,7 +1528,7 @@ const HZ_TXT = {
   carp: ['carp', '水裡有動靜…大鯉魚要跳了！'],
   boat: ['boat', '小船經過，大浪會把大家推開'],
   kid: ['kid', '小孩在丟麵包！鴨媽媽可以先吃掉'],
-  bag: ['bag', '垃圾漂過來，別讓小鴨被纏住'],
+  bag: ['bottle', '一大波垃圾漂過來了！別讓小鴨被纏住'],
   fisher: ['fisher', '漁夫舉網了！快離開粉紅圈圈']
 };
 function spawnHazard(type, diff, bonus) {
@@ -1555,18 +1581,20 @@ function update(dt) {
   // --- hazards ---
   if (G.started && !G.landing) {
     const p = -m.y, diff = diffAt();
-    const maxA = diff < 0.4 ? 1 : 2;
+    const maxA = diff < 0.18 ? 1 : 2;
     const nxt = G.sched[G.si];
     if (!G.forkWarn && p > FORK_A - 420) { G.forkWarn = true; toast('icoWave', `河道分岔！${G.forkSide < 0 ? '左' : '右'}邊超級湍急，${G.forkSide < 0 ? '右' : '左'}邊石頭超多，選一邊！`, true); Snd.alert(); }
     if (nxt && p > FORK_A - 780 && p < FORK_B + 60 && nxt.p < FORK_B + 60) G.si++;   // the fork is its own challenge (and nothing may spill into it)
     else if (nxt && p > WF_START - 880) G.si = G.sched.length;  // keep the run-up to the waterfall clear
-    else if (nxt && p >= nxt.p && G.hazards.length < maxA && G.t - G.lastSpawn > 1.6) { spawnHazard(nxt.type, diff); G.si++; }
+    else if (nxt && p >= nxt.p && G.hazards.length < maxA && G.t - G.lastSpawn > 1.6 &&
+      !(SPATIAL.has(nxt.type) && G.hazards.some(h => SPATIAL.has(h.type)))) { spawnHazard(nxt.type, diff); G.si++; }
     G.eagleCD -= dt;
     if (G.idle > 2.8 && G.eagleCD <= 0 && G.line.length && G.hazards.length < 2 && !G.hazards.some(h => h.type === 'eagle') && p > 200 && p < WF_START - 100) {
       spawnHazard('eagle', Math.max(diff, 0.6), true); G.eagleCD = 7;
     }
     if (!G.wfWarn && p > WF_START - 520) { G.wfWarn = true; toast('icoFall', '前方瀑布！水流往右拉，左岸還有土堆擋路，繞過去時抓緊隊伍！', true); Snd.alert(); }
   }
+  for (const h of G.static) if (h.ambient) h.update(dt);
   for (const h of G.hazards) h.update(dt);
   G.hazards = G.hazards.filter(h => !h.done);
 
