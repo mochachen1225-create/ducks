@@ -148,6 +148,9 @@ canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch
 .stats span{padding:4px 11px;background-color:var(--kraft);background-image:var(--grain);color:var(--paper);font-size:14px;font-weight:700;border-radius:2px;
   clip-path:polygon(8px 0,100% 0,100% 100%,8px 100%,0 50%)}
 .newrec{display:inline-block;margin-left:6px;padding:2px 9px;background:var(--red);color:var(--paper);font-size:13px;font-weight:700;border-radius:2px;animation:wiggle 1s infinite}
+#shareScr .card{padding-top:30px}
+#shareImg{display:block;width:100%;max-width:300px;margin:4px auto 8px;border-radius:4px;box-shadow:3px 4px 0 rgba(58,42,32,.2);-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
+.hint2{font-size:13px;color:var(--ink2);margin:0 0 4px}
 #copyTip{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 26px);transform:translateX(-50%) rotate(-1deg);z-index:20;padding:10px 18px;border-radius:3px;
   background:var(--ink);color:var(--paper);font-weight:700;font-size:15px;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
 #copyTip.show{opacity:1}
@@ -225,6 +228,18 @@ canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch
       </div>
     </div>
   </div>
+  <div class="screen hidden" id="shareScr">
+    <div class="card">
+      <h2>分享成績</h2>
+      <img id="shareImg" alt="成績圖">
+      <p class="hint2">也可以長按圖片直接存到相簿</p>
+      <div class="btns2">
+        <button class="btn mint" id="btnShareImg">分享成績圖</button>
+        <button class="btn" id="btnShareTxt">分享文字</button>
+      </div>
+      <button class="btn ghost" id="btnShareBack">返回</button>
+    </div>
+  </div>
   <div id="copyTip"></div>
 </div>
 
@@ -261,12 +276,14 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = (R() *
 function hash(a, b) { let h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 
 /* ---------------- river geometry ---------------- */
+// mud spits poking out from the left bank in the waterfall zone: you must swing out toward the lip to get round them
+function wfBumps(p) { let b = 0; for (const c of [WF_START + 70, WF_START + 250, WF_START + 430]) b += 150 * Math.exp(-Math.pow((p - c) / 56, 2)); return b; }
 function forkWiden(p) { return 24 * smooth(FORK_A - 220, FORK_A, p) * (1 - smooth(FORK_B, FORK_B + 220, p)); }
 function bankL(y) {
   const p = -y;
   let b = 40 + 13 * Math.sin(p * 0.0034 + 1.3) + 7 * Math.sin(p * 0.0097 + 0.4);
   const k = smooth(WF_START - 300, WF_START - 60, p);
-  return b * (1 - k) + 48 * k - forkWiden(p);
+  return b * (1 - k) + 48 * k - forkWiden(p) + wfBumps(p);
 }
 function bankR(y) {
   const p = -y;
@@ -340,7 +357,7 @@ function spr(name, x, y, w, h, ax = .5, ay = .5) {
 const SV = (vb, body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}">${body}</svg>`;
 // cut-paper wrapper: wobbly scissor edge + paper margin
 function P(vb, body, o = {}) {
-  const wob = o.wob ?? 2.2, br = o.border ?? 1.6, seed = o.seed ?? 3;
+  const wob = Math.min(o.wob ?? 0.6, 0.6), br = 0, seed = o.seed ?? 3;   // clean layered-paper look
   const edge = br > 0 ? `<feMorphology in="d" operator="dilate" radius="${br}" result="m"/><feFlood flood-color="${o.bc || '#fbf6ea'}"/><feComposite in2="m" operator="in" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="d"/></feMerge>` : '';
   return SV(vb, `<defs><filter id="cut" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="${o.freq || 0.08}" numOctaves="2" seed="${seed}" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="${wob}" xChannelSelector="R" yChannelSelector="G" result="d"/>${edge}</filter>${o.defs || ''}</defs><g filter="url(#cut)">${body}</g>`);
 }
@@ -874,7 +891,7 @@ function envForce(o, isMama) {
   const k = wfK(o.y);
   if (k > 0 && G.started) {
     const li = o.state === 'follow' ? o.li : 6;
-    fx += k * (isMama ? 36 : 42 + li * 4.5);
+    fx += k * (isMama ? 42 : 48 + li * 5.4);
     if (!isMama) fx += k * Math.sin(G.t * 3.1 + (o.id || 0) * 1.9) * 28;
   }
   for (const h of G.static) if (h.force) { const f = h.force(o, isMama); fx += f[0]; fy += f[1]; }
@@ -1548,7 +1565,7 @@ function update(dt) {
     if (G.idle > 2.8 && G.eagleCD <= 0 && G.line.length && G.hazards.length < 2 && !G.hazards.some(h => h.type === 'eagle') && p > 200 && p < WF_START - 100) {
       spawnHazard('eagle', Math.max(diff, 0.6), true); G.eagleCD = 7;
     }
-    if (!G.wfWarn && p > WF_START - 520) { G.wfWarn = true; toast('icoFall', '前方瀑布！水流往右拉，走左邊的小水道', true); Snd.alert(); }
+    if (!G.wfWarn && p > WF_START - 520) { G.wfWarn = true; toast('icoFall', '前方瀑布！水流往右拉，左岸還有土堆擋路，繞過去時抓緊隊伍！', true); Snd.alert(); }
   }
   for (const h of G.hazards) h.update(dt);
   G.hazards = G.hazards.filter(h => !h.done);
@@ -1558,7 +1575,7 @@ function update(dt) {
 
   // landing
   if (!G.landing && p >= L - 22) {
-    G.landing = true; G.landT = 0; G.saved = G.line.length; G.hazards = [];
+    G.landing = true; G.landT = 0; G.saved = G.line.length; G.savedIds = new Set(G.line.map(d => d.id)); G.hazards = [];
     for (const d of G.ducks) if (d.state === 'carried' || d.state === 'netted') d.state = 'gone';
     Snd.win(); buzz([30, 40, 30]); setExpr(m, 'happy', 99);
     toast('house', '到家囉！', false);
@@ -1641,9 +1658,9 @@ function followUpdate(d, dt) {
   }
   d.x += (d.vx + f[0]) * dt; d.y += (d.vy + f[1] + cur(d)) * dt;
   const hit = collideSolids(d, 8, false); clampBanks(d, 8, false);
-  if (hit && dist > 30) { d.rockT += dt; if (d.rockT > 0.35) { detach(d, 'lost', '卡住了！'); return; } } else d.rockT = Math.max(0, d.rockT - dt);
+  if (hit && dist > 30 && !G.landing) { d.rockT += dt; if (d.rockT > 0.35) { detach(d, 'lost', '卡住了！'); return; } } else d.rockT = Math.max(0, d.rockT - dt);
   if (dist > 78) d.strain += dt; else d.strain = Math.max(0, d.strain - dt * 1.5);
-  if (d.strain > 0.5) { detach(d, 'lost', '跟不上了！'); return; }
+  if (d.strain > 0.5 && !G.landing) { detach(d, 'lost', '跟不上了！'); return; }
   if (Math.abs(d.vx) > 25) d.face = d.vx > 0 ? 1 : -1;
 }
 function lostUpdate(d, dt) {
@@ -1682,11 +1699,9 @@ function grain() { if (grainPat) { ctx.fillStyle = grainPat; ctx.fill(); } }
 // crayon-ish line: two slightly offset thin strokes
 function crayon(draw, col, w, a = 1) {
   ctx.strokeStyle = col; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.globalAlpha = a; ctx.lineWidth = w; ctx.beginPath(); draw(0); ctx.stroke();
-  ctx.globalAlpha = a * .45; ctx.lineWidth = w * .6; ctx.beginPath(); draw(.9); ctx.stroke();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = a; ctx.lineWidth = w; ctx.beginPath(); draw(0); ctx.stroke(); ctx.globalAlpha = 1;
 }
-const tear = (y, s) => (hash(Math.round(y / 9), s) - .5) * 3.6;   // torn-paper jitter, anchored to the world
+const tear = () => 0;   // edges are clean cut paper now
 
 function render() {
   const k = dpr * scale;
@@ -1756,44 +1771,57 @@ function edgePts(top, bot, side) {
   pts.push([side < 0 ? bankL(y1) : bankR(y1), y1]);
   return pts;
 }
+const WATER = ['#8fd0e6', '#7cc3e0', '#6cb6da', '#7fc7e2', '#68b0d6'];
 function drawRiver(top, bot) {
   const Lp = edgePts(top, bot, -1), Rp = edgePts(top, bot, 1);
   if (!Lp.length) return;
-  ctx.beginPath();
-  for (const [x, y] of Lp) ctx.lineTo(x, y);
-  for (let i = Rp.length - 1; i >= 0; i--) ctx.lineTo(Rp[i][0], Rp[i][1]);
-  ctx.closePath(); ctx.fillStyle = COL.water; ctx.fill(); grain();
-  // the grass paper sits on top of the water paper: soft shadow + torn white fibre edge
-  for (const [pts, s] of [[Lp, 1], [Rp, -1]]) {
-    ctx.strokeStyle = COL.shadow; ctx.lineWidth = 6; ctx.lineJoin = 'round';
-    ctx.beginPath(); for (const [x, y] of pts) { if (s < 0 && isWF(y)) { ctx.stroke(); ctx.beginPath(); continue; } ctx.lineTo(x + s * 3.5, y + 1); } ctx.stroke();
-    ctx.strokeStyle = COL.edge; ctx.lineWidth = 2.6;
-    ctx.beginPath(); for (const [x, y] of pts) { if (s < 0 && isWF(y)) { ctx.stroke(); ctx.beginPath(); continue; } ctx.lineTo(x, y); } ctx.stroke();
+  const river = () => { ctx.beginPath(); for (const [x, y] of Lp) ctx.lineTo(x, y); for (let i = Rp.length - 1; i >= 0; i--) ctx.lineTo(Rp[i][0], Rp[i][1]); ctx.closePath(); };
+  river(); ctx.fillStyle = WATER[2]; ctx.fill();
+  // stacked sheets of wavy blue paper drifting downstream; each sheet casts a soft shadow onto the one behind it
+  ctx.save(); river(); ctx.clip();
+  const k = dpr * scale, gap = 64, v = CUR * 1.1, off = (G.t * v) % gap, base = Math.floor(G.t * v / gap);
+  const y0 = Math.max(top, -L - 20), y1 = Math.min(bot, 70);
+  const wave = (x, id) => 7 * Math.sin(x * 0.032 + id * 1.9 + G.t * 0.7) + 3 * Math.sin(x * 0.085 + id * 0.7 - G.t * 0.5);
+  for (let gy = Math.floor((y0 - off) / gap) - 1; gy * gap + off < y1 + gap; gy++) {
+    const id = gy - base, yt = gy * gap + off;
+    const edge = () => { ctx.moveTo(-10, yt + wave(-10, id)); for (let x = 0; x <= W + 10; x += 10) ctx.lineTo(x, yt + wave(x, id)); };
+    ctx.beginPath(); edge(); ctx.lineTo(W + 10, yt + gap + 30); ctx.lineTo(-10, yt + gap + 30); ctx.closePath();
+    ctx.shadowColor = 'rgba(25,70,110,.32)'; ctx.shadowBlur = 8 * k; ctx.shadowOffsetY = -2 * k;
+    ctx.fillStyle = WATER[((id % 5) + 5) % 5]; ctx.fill();
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    ctx.beginPath(); edge(); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2.2; ctx.stroke();
+  }
+  ctx.restore();
+  // grass sheets lie on top of the water: soft shadow + clean white paper rim
+  for (const [pts, sd] of [[Lp, 1], [Rp, -1]]) {
+    ctx.save(); ctx.shadowColor = 'rgba(25,60,40,.35)'; ctx.shadowBlur = 6 * k; ctx.shadowOffsetX = sd * 2 * k; ctx.shadowOffsetY = 1.5 * k;
+    ctx.strokeStyle = COL.edge; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+    ctx.beginPath(); for (const [x, y] of pts) { if (sd < 0 && isWF(y)) { ctx.stroke(); ctx.beginPath(); continue; } ctx.lineTo(x, y); } ctx.stroke();
+    ctx.restore();
   }
 }
 function drawWaterTex(top, bot) {
-  const cw = 46, ch = 40, v = CUR * 1.1, off = (G.t * v) % ch, base = Math.floor(G.t * v / ch);
-  ctx.strokeStyle = '#fff'; ctx.lineCap = 'round';
+  // a few floating bubbles and sparkles (paper punches)
+  const cw = 46, ch = 52, v = CUR * 1.1, off = (G.t * v) % ch, base = Math.floor(G.t * v / ch);
   for (let gy = Math.floor(top / ch) - 1; gy * ch < bot + ch; gy++) {
     const id = gy - base;
     for (let gx = 0; gx < 8; gx++) {
-      const h = hash(gx, id), x = gx * cw + 10 + h * 26, y = gy * ch + off + hash(id, gx) * 22;
+      const h = hash(gx, id); if (h > 0.22) continue;
+      const x = gx * cw + 10 + hash(id, gx + 3) * 26, y = gy * ch + off + hash(id, gx) * 30;
       if (!inWater(y)) continue;
       const bl = bankL(y) + 12, br = (isWF(y) ? WF_X : bankR(y)) - 12;
       if (x < bl || x > br) continue;
-      if (h < 0.55) {
-        const a = 0.45 + 0.3 * Math.sin(G.t * 2 + h * 12);
-        crayon(o => { ctx.moveTo(x - 8, y + o); ctx.quadraticCurveTo(x - 4, y - 3 + o, x, y + o); ctx.quadraticCurveTo(x + 4, y + 3 + o, x + 8, y + o); }, '#fff', 1.8, a);
-      } else if (h > 0.9) { ctx.globalAlpha = 0.6 + 0.4 * Math.sin(G.t * 4 + h * 30); spark(x, y, 1.7); ctx.globalAlpha = 1; }
+      if (h < 0.06) { ctx.globalAlpha = 0.6 + 0.4 * Math.sin(G.t * 4 + h * 90); spark(x, y, 1.7); ctx.globalAlpha = 1; }
+      else { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.arc(x, y, 1.6 + h * 9, 0, Math.PI * 2); ctx.fill(); }
     }
   }
-  // waterfall pull arrows (white crayon)
   const k0 = Math.max(top, -(WF_END + 100)), k1 = Math.min(bot, -(WF_START - 260));
   if (k1 > k0) {
     for (let i = 0; i < 16; i++) {
       const y = k0 + hash(i, 21) * (k1 - k0), kk = wfK(y); if (kk < 0.2) continue;
-      const span = WF_X - bankL(y), x = bankL(y) + ((hash(i, 23) * span + G.t * 70 * kk) % span);
-      crayon(o => { ctx.moveTo(x - 9, y + o); ctx.lineTo(x + 9, y + o); ctx.moveTo(x + 4, y - 4 + o); ctx.lineTo(x + 9, y + o); ctx.lineTo(x + 4, y + 4 + o); }, '#fff', 1.8, kk * 0.85 * Math.sin(Math.PI * (x - bankL(y)) / span));
+      const span = WF_X - bankL(y); if (span < 30) continue;
+      const x = bankL(y) + ((hash(i, 23) * span + G.t * 70 * kk) % span);
+      crayon(() => { ctx.moveTo(x - 9, y); ctx.lineTo(x + 9, y); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x + 9, y); ctx.lineTo(x + 4, y + 4); }, '#fff', 2, kk * 0.85 * Math.sin(Math.PI * (x - bankL(y)) / span));
     }
   }
 }
@@ -1825,7 +1853,7 @@ function drawWaterfall(top, bot) {
 function sandPiece(yEdge, dir, depth, phase) {
   // a torn sheet of kraft "sand" paper; dir -1 = extends downward (start), +1 = extends upward (farm)
   ctx.beginPath(); ctx.moveTo(-4, yEdge);
-  for (let x = -4; x <= W + 4; x += 8) ctx.lineTo(x, yEdge + Math.sin(x * 0.05 + phase) * 4 + (hash(x, 77) - .5) * 3);
+  for (let x = -4; x <= W + 4; x += 8) ctx.lineTo(x, yEdge + Math.sin(x * 0.05 + phase) * 4);
   ctx.lineTo(W + 4, yEdge - dir * depth); ctx.lineTo(-4, yEdge - dir * depth); ctx.closePath();
 }
 function drawShores(top, bot) {
@@ -1838,7 +1866,7 @@ function drawShores(top, bot) {
     for (let i = 0; i < 18; i++) { ctx.beginPath(); ctx.arc(hash(i, 1) * W, 74 + hash(i, 2) * 120, 1.2 + hash(i, 3) * 1.6, 0, Math.PI * 2); ctx.fill(); }
     // grass sheet above the sand at the very bottom
     ctx.beginPath(); ctx.moveTo(-4, 214);
-    for (let x = -4; x <= W + 4; x += 8) ctx.lineTo(x, 206 + Math.sin(x * 0.04 + 1) * 10 + (hash(x, 78) - .5) * 3);
+    for (let x = -4; x <= W + 4; x += 8) ctx.lineTo(x, 206 + Math.sin(x * 0.04 + 1) * 10);
     ctx.lineTo(W + 4, 360); ctx.lineTo(-4, 360); ctx.closePath();
     ctx.save(); ctx.translate(0, -2.5); ctx.fillStyle = COL.shadow; ctx.fill(); ctx.restore();
     ctx.fillStyle = COL.grass; ctx.fill(); grain();
@@ -1874,7 +1902,7 @@ function drawLandmarks(top, bot) {
     spr('sign', c, fy2, 66, 50); signText(rl ? '←急流' : '←石頭', c, fy2 - 14, 10, rl ? C.red2 : INK); signText(rl ? '石頭→' : '急流→', c, fy2 - 2, 10, rl ? INK : C.red2);
   }
   const wy = -(WF_START - 300);
-  if (wy > top - 40 && wy < bot + 40) { spr('sign', bankL(wy) - 2, wy, 46, 42); signText('←安全', bankL(wy) - 2, wy - 9, 11); }
+  if (wy > top - 40 && wy < bot + 40) { spr('sign', bankL(wy) - 2, wy, 46, 42); signText('小心!', bankL(wy) - 2, wy - 9, 11, C.red2); }
   const wy2 = -(WF_START - 120);
   if (wy2 > top - 40 && wy2 < bot + 40) { spr('sign', W - 26, wy2 - 50, 46, 42); signText('瀑布!', W - 26, wy2 - 59, 12, C.red2); }
 }
@@ -2007,7 +2035,7 @@ function duckImgHTML(acc, expr, size, cls = '') {
   return `<span class="duckimg ${cls}" style="${s}"><img src="${URLS['duck_' + expr]}" alt="">${acc ? `<img src="${URLS['acc_' + acc]}" alt="">` : ''}</span>`;
 }
 function mamaImgHTML(expr, size) { return `<span class="duckimg" style="width:${size}px;height:${size}px"><img src="${URLS['mama_' + expr]}" alt=""></span>`; }
-function showScreen(id) { for (const s of ['#titleScr', '#pauseScr', '#resultScr']) $(s).classList.toggle('hidden', s !== id); }
+function showScreen(id) { for (const s of ['#titleScr', '#pauseScr', '#resultScr', '#shareScr']) $(s).classList.toggle('hidden', s !== id); }
 
 const TITLES = [[15, '完美鴨媽媽，一隻都沒少！'], [10, '還不錯，有幾隻在路上玩到忘了回家'], [5, '鴨爸爸問你孩子們呢'], [1, '至少還有一隻愛你'], [0, '你是不是根本沒在顧小孩']];
 const titleFor = n => TITLES.find(t => n >= t[0])[1];
@@ -2023,7 +2051,7 @@ function showResult() {
   $('#rRibbon').textContent = fell ? 'THE END' : '回到農舍了！';
   $('#rRibbon').style.backgroundColor = fell ? 'var(--red)' : '';
   $('#rCount').textContent = n; $('#rTitle').textContent = fell ? '喔喔～是沒在看路嗎？' : titleFor(n);
-  const saved = new Set(G.line.map(d => d.id));
+  const saved = G.savedIds || new Set();
   const order = G.ducks.slice().sort((a, c) => (saved.has(c.id) - saved.has(a.id)));
   $('#rGrid').innerHTML = order.map((d, i) => duckImgHTML(d.acc, saved.has(d.id) ? 'happy' : 'sad', 0, saved.has(d.id) ? '' : 'lost').replace('style=""', `style="animation-delay:${i * 0.04}s"`)).join('');
   const miss = G.ducks.filter(d => !saved.has(d.id)).map(d => d.name);
@@ -2064,6 +2092,99 @@ async function share() {
   }
   tip(ok ? '已複製成績，貼到 LINE 給朋友吧！' : '複製失敗，請手動截圖分享');
 }
+/* ---------- result picture (for sharing) ---------- */
+let shareBlob = null, shareURL = null;
+function resultLines() {
+  const n = G.saved, fell = G.mamaFall;
+  return { n, fell, title: fell ? '喔喔～是沒在看路嗎？' : titleFor(n), ribbon: fell ? 'THE END' : '回到農舍了！' };
+}
+function makeShareImage() {
+  const WI = 1080, HI = 1350, c = document.createElement('canvas'); c.width = WI; c.height = HI;
+  const g = c.getContext('2d'), { n, fell, title, ribbon } = resultLines();
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const grainFill = () => { if (GRAIN) { g.save(); g.fillStyle = g.createPattern(GRAIN, 'repeat'); g.fill(); g.restore(); } };
+  const sp = (name, x, y, w, h) => { const s2 = S[name]; if (!s2) return; const px = s2.pad * w / s2.w, py = s2.pad * h / s2.h; g.drawImage(s2.c, x - w / 2 - px, y - h / 2 - py, w + px * 2, h + py * 2); };
+  const F = sz => `400 ${sz}px ${FONT}`;
+  // background: layered paper waves like the river
+  g.fillStyle = '#93c06a'; g.fillRect(0, 0, WI, HI);
+  for (let i = 0; i < 9; i++) {
+    const yt = 820 + i * 70;
+    g.beginPath(); g.moveTo(0, yt);
+    for (let x = 0; x <= WI; x += 20) g.lineTo(x, yt + 18 * Math.sin(x * 0.011 + i * 1.7) + 7 * Math.sin(x * 0.03 + i));
+    g.lineTo(WI, HI); g.lineTo(0, HI); g.closePath();
+    g.save(); g.shadowColor = 'rgba(25,70,110,.32)'; g.shadowBlur = 18; g.shadowOffsetY = -5; g.fillStyle = WATER[i % 5]; g.fill(); g.restore();
+    g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 5; g.beginPath(); for (let x = 0; x <= WI; x += 20) g.lineTo(x, yt + 18 * Math.sin(x * 0.011 + i * 1.7) + 7 * Math.sin(x * 0.03 + i)); g.stroke();
+  }
+  // paper card
+  g.save(); g.translate(WI / 2, 680); g.rotate(-0.012);
+  g.shadowColor = 'rgba(58,42,32,.3)'; g.shadowBlur = 0; g.shadowOffsetX = 12; g.shadowOffsetY = 16;
+  rr(-450, -620, 900, 1240, 18); g.fillStyle = C.cream; g.fill(); g.restore();
+  g.save(); g.translate(WI / 2, 680); g.rotate(-0.012); rr(-450, -620, 900, 1240, 18); grainFill(); g.restore();
+  // tape
+  g.save(); g.translate(WI / 2, 64); g.rotate(-0.04); g.fillStyle = 'rgba(239,224,173,.92)'; g.fillRect(-120, -26, 240, 52); g.restore();
+  // title tiles
+  const cols = [C.red, C.mus, C.teal, C.blue, C.green];
+  '鴨媽媽回家'.split('').forEach((ch, i) => {
+    const x = WI / 2 + (i - 2) * 132, y = 210 + (i % 2) * 8;
+    g.save(); g.translate(x, y); g.rotate([-0.1, 0.07, -0.05, 0.08, -0.08][i]);
+    g.fillStyle = 'rgba(58,42,32,.25)'; rr(-52, -54, 112, 118, 22); g.fill();
+    g.fillStyle = cols[i]; rr(-58, -60, 112, 118, 22); g.fill(); grainFill();
+    g.fillStyle = C.cream; g.font = F(82); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, -2, 2); g.restore();
+  });
+  // ribbon
+  g.save(); g.translate(WI / 2, 335); g.rotate(-0.03);
+  g.fillStyle = fell ? C.red : C.teal; g.beginPath(); g.moveTo(-190, -34); g.lineTo(190, -34); g.lineTo(165, 0); g.lineTo(190, 34); g.lineTo(-190, 34); g.lineTo(-165, 0); g.closePath(); g.fill();
+  g.fillStyle = C.cream; g.font = F(40); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ribbon, 0, 2); g.restore();
+  // score
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.save(); g.translate(WI / 2 - 50, 540); g.rotate(-0.06); g.fillStyle = 'rgba(58,42,32,.15)'; g.font = F(220); g.fillText(String(n), 8, 8); g.fillStyle = C.red; g.fillText(String(n), 0, 0); g.restore();
+  g.fillStyle = INK; g.font = F(64); g.textAlign = 'left'; g.fillText('/ 15 隻', WI / 2 + 30 + (n >= 10 ? 60 : 10), 530);
+  sp(fell ? 'mama_wow' : 'mama_happy', 225, 460, 170, 170);
+  // title sticky note (wrap)
+  g.font = F(50); g.textAlign = 'center';
+  const lines = []; let cur = '';
+  for (const ch of title) { if (g.measureText(cur + ch).width > 720) { lines.push(cur); cur = ch; } else cur += ch; }
+  lines.push(cur);
+  const nh = 50 + lines.length * 64;
+  g.save(); g.translate(WI / 2, 590 + nh / 2); g.rotate(0.012); g.fillStyle = 'rgba(58,42,32,.16)'; g.fillRect(-392, -nh / 2 + 8, 790, nh); g.fillStyle = '#fde9a8'; g.fillRect(-400, -nh / 2, 790, nh); g.restore();
+  g.fillStyle = INK; lines.forEach((l, i) => g.fillText(l, WI / 2, 590 + 25 + 48 + i * 64));
+  // duck grid
+  const saved = G.savedIds || new Set(), order = G.ducks.slice().sort((a, b) => saved.has(b.id) - saved.has(a.id));
+  const gy0 = 600 + nh + 26;
+  g.save(); rr(170, gy0, 740, 395, 14); g.fillStyle = '#93c06a'; g.fill(); grainFill(); g.restore();
+  order.forEach((d, i) => {
+    const x = 170 + 74 + (i % 5) * 148, y = gy0 + 70 + Math.floor(i / 5) * 128, ok = saved.has(d.id);
+    g.save(); g.globalAlpha = ok ? 1 : 0.3;
+    sp(ok ? 'duck_happy' : 'duck_sad', x, y, 128, 128); if (d.acc) sp('acc_' + d.acc, x, y, 128, 128);
+    g.restore();
+  });
+  // footer
+  g.font = F(36); g.textAlign = 'center'; g.fillStyle = '#7a6250';
+  g.fillText(`用時 ${fmtTime(G.stats.time)}　救回 ${G.stats.rescues} 次　${fell ? '全家坐了瀑布溜滑梯' : '你能一隻都不少嗎？'}`, WI / 2, gy0 + 450);
+  g.fillStyle = '#fbf6ea'; g.font = F(34);
+  g.fillText(location.host ? location.host + location.pathname : '鴨媽媽回家', WI / 2, HI - 16);
+  return new Promise(res => c.toBlob(b => res(b), 'image/png'));
+}
+async function openShareSheet() {
+  showScreen('#shareScr');
+  $('#shareImg').removeAttribute('src');
+  try { await (document.fonts && document.fonts.load('40px "Huninn"')); } catch (e) { }
+  shareBlob = await makeShareImage();
+  if (shareURL) URL.revokeObjectURL(shareURL);
+  shareURL = shareBlob ? URL.createObjectURL(shareBlob) : null;
+  if (shareURL) $('#shareImg').src = shareURL;
+}
+async function shareImage() {
+  if (!shareBlob) return;
+  const file = new File([shareBlob], 'duck-home.png', { type: 'image/png' });
+  const { n, fell, title } = resultLines();
+  const text = fell ? '我在《鴨媽媽回家》帶全家衝下瀑布了……「喔喔～是沒在看路嗎？」' : `我在《鴨媽媽回家》帶了 ${n}/15 隻小鴨回家！「${title}」`;
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: '鴨媽媽回家', text }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a'); a.href = shareURL; a.download = 'duck-home.png'; document.body.appendChild(a); a.click(); a.remove();
+  tip('圖片已下載；也可以長按上面的圖存到相簿');
+}
 let tipT = 0;
 function tip(t) { const el = $('#copyTip'); el.textContent = t; el.classList.add('show'); clearTimeout(tipT); tipT = setTimeout(() => el.classList.remove('show'), 2200); }
 
@@ -2095,7 +2216,10 @@ $('#btnAgain').addEventListener('click', startGame);
 $('#btnRestart').addEventListener('click', startGame);
 $('#btnResume').addEventListener('click', () => { Snd.click(); resumeGame(); });
 $('#btnPause').addEventListener('click', () => { Snd.click(); pauseGame(); });
-$('#btnShare').addEventListener('click', () => { Snd.click(); share(); });
+$('#btnShare').addEventListener('click', () => { Snd.click(); openShareSheet(); });
+$('#btnShareImg').addEventListener('click', () => { Snd.click(); shareImage(); });
+$('#btnShareTxt').addEventListener('click', () => { Snd.click(); share(); });
+$('#btnShareBack').addEventListener('click', () => { Snd.click(); showScreen('#resultScr'); });
 $('#btnMute').addEventListener('click', () => {
   Snd.init(); const m = !Snd.muted; Snd.setMuted(m); store.set('duckHome.muted', m); syncMute(); if (!m) Snd.click();
 });
