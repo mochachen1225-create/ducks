@@ -2265,8 +2265,21 @@ function duckImgHTML(acc, expr, size, cls = '') {
 function mamaImgHTML(expr, size) { return `<span class="duckimg" style="width:${size}px;height:${size}px"><img src="${URLS['mama_' + expr]}" alt=""></span>`; }
 function showScreen(id) { for (const s of ['#titleScr', '#pauseScr', '#resultScr', '#shareScr']) $(s).classList.toggle('hidden', s !== id); }
 
-const TITLES = [[15, '完美鴨媽媽，一隻都沒少！'], [10, '還不錯，有幾隻在路上玩到忘了回家'], [5, '鴨爸爸問你孩子們呢'], [1, '至少還有一隻愛你'], [0, '你是不是根本沒在顧小孩']];
-const titleFor = n => TITLES.find(t => n >= t[0])[1];
+// ending lines per tier; {a} / {b} are filled with the names of ducklings that didn't make it home
+const TITLES = [
+  [15, ['完美鴨媽媽，一隻都沒少！', '15 隻全員到齊，今晚加菜！', '點名：一、二、三……十五！一隻不少！', '鴨爸爸感動到哭：「你是怎麼辦到的？」']],
+  [10, ['還不錯，有幾隻在路上玩到忘了回家', '鴨爸爸數了兩次：「咦？是不是少了幾隻？」', '差一點點就全員到齊了！', '{a}大概又跑去吃麵包了吧……', '晚餐多煮了幾碗，有點浪費']],
+  [5, ['鴨爸爸問你孩子們呢', '鴨爸爸：「{a}呢？{b}呢？」', '剩下的孩子應該……會自己游回來吧？', '家裡突然變得好安靜', '鴨奶奶已經打電話去報警了']],
+  [1, ['至少還有一隻愛你', '回家路上好像掉了什麼……喔，是孩子', '鴨爸爸默默拿著手電筒去河邊找人了', '「媽媽，其他人呢？」「……先吃飯。」']],
+  [0, ['你是不是根本沒在顧小孩', '鴨媽媽一個人回家，鴨爸爸傻眼', '呃……是不是忘了什麼？15 個孩子之類的', '今天的晚餐好像特別多']]
+];
+function titleFor(n) {
+  const pool = TITLES.find(t => n >= t[0])[1];
+  const miss = G ? shuffle(G.ducks.filter(d => !(G.savedIds && G.savedIds.has(d.id))).map(d => d.name)) : [];
+  let line = pool[(R() * pool.length) | 0];
+  if (/\{a\}/.test(line) && !miss.length) line = pool[0];
+  return line.replace('{a}', miss[0] || '').replace('{b}', miss[1] || miss[0] || '');
+}
 function fmtTime(s) { s = Math.round(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 
 function showResult() {
@@ -2327,8 +2340,9 @@ function resultLines() {
     share: '我在《鴨媽媽回家》帶著全家衝下瀑布了……\n「喔喔～是沒在看路嗎？」\n你能平安到家嗎？' };
   if (late) return { n, fell, late, ribbon: '時間到！', title: G.lateLine, note: `還有 ${n} 隻跟在身邊，可是 2 分鐘內沒趕到農舍……`, foot: '沒趕上晚餐',
     share: `我在《鴨媽媽回家》帶著 ${n} 隻小鴨……結果時間到了！\n「${G.lateLine}」\n你能 2 分鐘內到家嗎？` };
-  return { n, fell, late, ribbon: '回到農舍了！', title: titleFor(n), note: null, foot: '你能一隻都不少嗎？',
-    share: `我在《鴨媽媽回家》帶了 ${n}/15 隻小鴨回家！\n稱號：「${titleFor(n)}」\n你能一隻都不少嗎？` };
+  if (!G.homeLine) G.homeLine = titleFor(n);
+  return { n, fell, late, ribbon: '回到農舍了！', title: G.homeLine, note: null, foot: '你能一隻都不少嗎？',
+    share: `我在《鴨媽媽回家》帶了 ${n}/15 隻小鴨回家！\n稱號：「${G.homeLine}」\n你能一隻都不少嗎？` };
 }
 function makeShareImage() {
   const WI = 1080, HI = 1350, c = document.createElement('canvas'); c.width = WI; c.height = HI;
