@@ -145,6 +145,13 @@ canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch
 .btn svg{width:22px;height:22px;vertical-align:-4px;margin-right:6px}
 .foot{margin-top:14px;font-size:13px;color:var(--ink2)}
 .btns2{display:flex;gap:10px}.btns2 .btn{flex:1}
+.pick{margin:2px 0 0;font-size:15px;color:var(--ink2)}
+.roles .btn{font-size:17px;letter-spacing:0;padding:10px 8px 12px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.roles .ri{position:relative;width:54px;height:54px;display:block}
+.roles .ri img{position:absolute;inset:0;width:100%;height:100%}
+.roles .btn.last{transform:translateY(-3px) rotate(-1.5deg)}
+.btn.blue{background-color:var(--blue);box-shadow:0 5px 0 var(--blue2),3px 9px 0 rgba(58,42,32,.18)}
+.btn.blue:active{box-shadow:0 1px 0 var(--blue2),2px 4px 0 rgba(58,42,32,.18)}
 
 /* result */
 .ribbon{display:inline-block;margin:0 0 6px;padding:6px 22px;background-color:var(--teal);background-image:var(--grain);color:var(--paper);font-weight:700;font-size:16px;
@@ -207,16 +214,20 @@ canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch
   <div class="screen" id="titleScr">
     <div class="card">
       <div class="logo" id="logo"></div>
-      <h1><span class="lt">鴨</span><span class="lt">媽</span><span class="lt">媽</span><span class="lt">回</span><span class="lt">家</span></h1>
+      <h1 id="titleTiles"><span class="lt">鴨</span><span class="lt">媽</span><span class="lt">媽</span><span class="lt">回</span><span class="lt">家</span></h1>
       <p class="sub">帶著 15 隻小鴨，平安游回河邊的小農舍</p>
       <ul class="how">
-        <li><img id="howA" alt=""><span><b>按住拖曳</b>：鴨媽媽跟著手指游，小鴨排隊跟上</span></li>
+        <li><img id="howA" alt=""><span><b>按住拖曳</b>：<span class="me">鴨媽媽</span>跟著手指游，小鴨排隊跟上</span></li>
         <li><img id="howB" alt=""><span><b>放開手指</b>：大家停下喘口氣，但水流會往回推、老鷹也會盯上</span></li>
         <li><img id="howC" alt=""><span><b>掉隊的小鴨</b>：游回去碰牠一下，就會重新跟上</span></li>
         <li><img id="howD" alt=""><span><b>限時 2 分鐘</b>趕回家吃晚餐！危險每次都不一樣，最後還有<b>瀑布</b></span></li>
       </ul>
       <div class="best" id="bestTitle">最佳紀錄：還沒有</div>
-      <button class="btn" id="btnStart">出發囉！</button>
+      <p class="pick">你要當誰？選好就出發！</p>
+      <div class="btns2 roles">
+        <button class="btn role" id="btnMama" data-role="mama"><span class="ri" id="riMama"></span>我是鴨媽媽</button>
+        <button class="btn role blue" id="btnPapa" data-role="papa"><span class="ri" id="riPapa"></span>我是鴨爸爸</button>
+      </div>
       <div class="foot">直式手機遊玩・打開聲音更療癒・點小鴨會呱呱叫</div>
     </div>
   </div>
@@ -244,6 +255,7 @@ canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch
         <button class="btn mint" id="btnShare"><svg viewBox="0 0 24 24"><path d="M12 3.5c-5 0-9 3.2-9 7.2 0 3.6 3.2 6.6 7.5 7.1.3.1.7.2.8.5.1.3 0 .7 0 1l-.1.8c0 .3-.2 1 .9.5s5.8-3.4 7.9-5.9c1.5-1.6 2-3.1 2-4.6 0-3.9-4-7.1-9-7.1z" fill="#fff"/></svg>分享</button>
         <button class="btn" id="btnAgain">再玩一次</button>
       </div>
+      <button class="btn ghost" id="btnHome">換爸爸／媽媽</button>
     </div>
   </div>
   <div class="screen hidden" id="shareScr">
@@ -400,8 +412,12 @@ function eyesSVG(kind) {
 }
 const LAYER = `<filter id="ls" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.6"/><feOffset dx="1.2" dy="2.2"/><feComponentTransfer><feFuncA type="linear" slope=".28"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
 function duckSVG(o) {
-  const { body, wing, expr, mama } = o;
-  const hat = mama ? `
+  const { body, wing, expr, mama, papa } = o, head = o.head || body;
+  const hat = papa ? `
+    <path d="M47 53 Q64 61 81 53" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <g transform="translate(66 60)"><path d="M0 0 L-10 -6 L-10 6Z" fill="${C.red}"/><path d="M0 0 L10 -6 L10 6Z" fill="${C.red}"/><circle r="2.8" fill="${C.red2}"/><circle cx="-6.5" cy="-1.5" r="1" fill="#fff" opacity=".8"/><circle cx="6.5" cy="1.5" r="1" fill="#fff" opacity=".8"/></g>
+    <path d="M58 16 Q60 9 66 10 Q63 13 63 16Z" fill="${head}"/>`
+    : mama ? `
     <path d="M44 25 Q48 9 64 9 Q80 9 84 22 Q74 17 64 18 Q52 18 44 25Z" fill="url(#gg)"/>
     <path d="M46 24 Q36 24 31 31 Q40 31 47 27Z" fill="url(#gg)"/><path d="M47 26 Q40 32 40 38 Q46 33 48 28Z" fill="url(#gg)"/>
     <g transform="translate(80 15)"><g fill="${C.cream}"><circle cx="0" cy="-4.6" r="3.5"/><circle cx="4.4" cy="-1.4" r="3.5"/><circle cx="2.7" cy="3.8" r="3.5"/><circle cx="-2.7" cy="3.8" r="3.5"/><circle cx="-4.4" cy="-1.4" r="3.5"/></g>${BUTTON(0, 0, 2.8, C.mus)}</g>`
@@ -411,17 +427,17 @@ function duckSVG(o) {
   <path d="M14 76 C24 88 50 92 74 86" stroke="#000" stroke-opacity=".07" stroke-width="5" fill="none" stroke-linecap="round"/>
   <g filter="url(#ls)"><path d="M61 67 C58 56 42 53 20 57 C28 61 30 64 26 68 C34 80 57 81 61 67Z" fill="${wing}"/></g>
   <path d="M31 63 C40 60 50 61 56 65" stroke="#fff" stroke-opacity=".5" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-  ${mama ? `<path d="M20 80 C34 88 56 89 72 83" stroke="${C.red}" stroke-width="1.6" fill="none" stroke-dasharray="3 3" stroke-linecap="round" opacity=".7"/>` : ''}
+  ${mama || papa ? `<path d="M20 80 C34 88 56 89 72 83" stroke="${papa ? C.navy : C.red}" stroke-width="1.6" fill="none" stroke-dasharray="3 3" stroke-linecap="round" opacity=".7"/>` : ''}
   <g filter="url(#ls)">
-    <circle cx="64" cy="36" r="21.5" fill="${body}"/>
+    <circle cx="64" cy="36" r="21.5" fill="${head}"/>
     ${hat}
   </g>
-  <path d="M50 26 Q55 20 62 19" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" opacity=".55"/>
-  <ellipse cx="75.5" cy="43" rx="4.4" ry="2.8" fill="${C.coral}" opacity=".6"/>
+  <path d="M50 26 Q55 20 62 19" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" opacity="${papa ? '.35' : '.55'}"/>
+  <ellipse cx="75.5" cy="43" rx="4.4" ry="2.8" fill="${C.coral}" opacity="${papa ? '.45' : '.6'}"/>
   ${eyesSVG(expr)}
   <g filter="url(#ls)"><path d="M82 34 C90 32.5 97.5 35.5 96.5 40.5 C95.5 45.5 88 47 82 45Z" fill="${C.orange}"/></g>
   <path d="M84 41 Q90 41.6 95.5 40.6" stroke="#c4661f" stroke-width="1.2" fill="none" stroke-linecap="round"/>`,
-  { seed: mama ? 11 : 7, wob: 0.6, border: 0, defs: LAYER + (mama ? GINGHAM('gg', C.red) : '') });
+  { seed: mama ? 11 : papa ? 12 : 7, wob: 0.6, border: 0, defs: LAYER + (mama ? GINGHAM('gg', C.red) : '') });
 }
 const ACC = {
   bow: `<g transform="translate(55 17) rotate(-18)"><path d="M0 0 L-12 -8 Q-16 0 -12 8Z" fill="url(#gr)"/><path d="M0 0 L12 -8 Q16 0 12 8Z" fill="url(#gr)"/><path d="M-2 2 L-5 11 M2 2 L5 11" stroke="${C.red}" stroke-width="2.6" stroke-linecap="round"/><circle r="3.8" fill="${C.red2}"/></g>`,
@@ -452,6 +468,7 @@ function buildSprites() {
   const wht = { body: '#fdf8ee', wing: '#e8d6b6' };
   for (const e of ['normal', 'happy', 'sad', 'dizzy', 'wow']) add('duck_' + e, duckSVG({ ...yel, expr: e }), 30, 30);
   for (const e of ['normal', 'happy', 'sad', 'wow']) add('mama_' + e, duckSVG({ ...wht, expr: e, mama: true }), 46, 46);
+  for (const e of ['normal', 'happy', 'sad', 'wow']) add('papa_' + e, duckSVG({ body: '#f1ebe0', wing: '#b9a98f', head: '#4f9a6e', expr: e, papa: true }), 46, 46);
   for (const k in ACC) add('acc_' + k, P('0 0 100 100', `<g filter="url(#ls)">${ACC[k]}</g>`, { seed: 5, wob: 0.6, border: 0, defs: LAYER + GINGHAM('gr', C.red) }), 30, 30, { flat: true });
 
   // layered paper pebbles: darker base sheet + lighter top sheet + a little sticker
@@ -962,10 +979,16 @@ function rejoin(d) {
   if (freed) float(d.x, d.y - 40, '解開了！', '#3f8f55', null, 12);
   burst(d.x, d.y - 8, 'heart', 5, 50); Snd.chime(); buzz(15); G.stats.rescues++; bumpHud();
 }
-const LATE_LINES = ['趕不回去吃晚餐了…鴨爸爸已經先開動了', '天黑了，今晚只好在河邊露營', '太陽下山囉～鴨爸爸打電話來問人在哪', '晚餐涼掉了…下次要游快一點！'];
+/* ---- who's leading the family: chosen on the title screen ---- */
+let ROLE = 'mama';
+const ME = () => ROLE === 'papa' ? '鴨爸爸' : '鴨媽媽';
+const MATE = () => ROLE === 'papa' ? '鴨媽媽' : '鴨爸爸';
+const GAME = () => ME() + '回家';
+const who = t => t.replace(/\{me\}/g, ME()).replace(/\{mate\}/g, MATE()).replace(/\{call\}/g, ROLE === 'papa' ? '爸爸' : '媽媽');
+const LATE_LINES = ['趕不回去吃晚餐了…{mate}已經先開動了', '天黑了，今晚只好在河邊露營', '太陽下山囉～{mate}打電話來問人在哪', '晚餐涼掉了…下次要游快一點！'];
 function startTimeUp() {
   const m = G.mama;
-  G.timeUp = true; G.tuT = 0; G.hazards = []; pointer.down = false; G.saved = G.line.length; G.savedIds = new Set(G.line.map(d => d.id)); G.lateLine = LATE_LINES[(R() * LATE_LINES.length) | 0];
+  G.timeUp = true; G.tuT = 0; G.hazards = []; pointer.down = false; G.saved = G.line.length; G.savedIds = new Set(G.line.map(d => d.id)); G.lateLine = who(LATE_LINES[(R() * LATE_LINES.length) | 0]);
   setExpr(m, 'sad', 99); m.quack = 0.45;
   float(m.x, m.y - 44, '咦？天黑了！', '#c9792b', null, 16, 1.8);
   for (const d of G.line) setExpr(d, 'sad', 99);
@@ -1167,7 +1190,7 @@ class Eagle {
     const m = G.mama;
     burst(this.sx, this.sy, 'drop', 8, 80); Snd.splash(.25);
     if (hyp(m.x - this.sx, m.y - this.sy) < this.R + 10) {
-      float(m.x, m.y - 40, '鴨媽媽趕走老鷹！', '#376f96', null, 14); Snd.quack(.9); setExpr(m, 'wow', 1); m.quack = .45; return;
+      float(m.x, m.y - 40, ME() + '趕走老鷹！', '#376f96', null, 14); Snd.quack(.9); setExpr(m, 'wow', 1); m.quack = .45; return;
     }
     const c = G.ducks.filter(d => catchable(d) && hyp(d.x - this.sx, d.y - this.sy) < this.R)
       .sort((a, b) => hyp(a.x - this.sx, a.y - this.sy) - hyp(b.x - this.sx, b.y - this.sy));
@@ -1467,7 +1490,7 @@ class Kid {
         }
       }
       if (hyp(m.x - b.x, m.y - b.y) < 24) {
-        b.gone = true; Snd.pop(); burst(b.x, b.y, 'crumb', 6, 40); float(b.x, b.y - 26, '鴨媽媽先吃掉！', '#c9792b', null, 13);
+        b.gone = true; Snd.pop(); burst(b.x, b.y, 'crumb', 6, 40); float(b.x, b.y - 26, ME() + '先吃掉！', '#c9792b', null, 13);
         if (b.duck && b.duck.state === 'lured') { b.duck.state = 'lost'; b.duck.lock = 0; b.duck.bread = null; setExpr(b.duck, 'sad', 1.5); }
       } else if (b.duck && b.duck.state === 'lured' && hyp(b.duck.x - b.x, b.duck.y - b.y) < 13) {
         b.eat += dt; if (R() < dt * 8) burst(b.x, b.y, 'crumb', 1, 30);
@@ -1675,13 +1698,13 @@ const SPATIAL = new Set(['rocks', 'rapids', 'logs', 'whirl']);
 const HZ = { rocks: Rocks, eagle: Eagle, rapids: Rapids, logs: Logs, whirl: Whirl, carp: Carp, boat: Boat, kid: Kid, bag: Bags, fisher: Fisher };
 const HZ_TXT = {
   rocks: ['rock1', '前方有石頭，轉彎別太急！'],
-  eagle: ['eagle', '老鷹的影子！快游開，或用鴨媽媽擋住'],
+  eagle: ['eagle', '老鷹的影子！快游開，或用{me}擋住'],
   rapids: ['icoWave', '急流！靠沒有白浪的那一側'],
   logs: ['icoLog', '浮木漂過來了，從空隙鑽過去'],
   whirl: ['icoSwirl', '漩渦！離中心遠一點'],
   carp: ['carp', '水裡有動靜…大鯉魚要跳了！'],
   boat: ['boat', '小船經過，大浪會把大家推開'],
-  kid: ['kid', '小孩在丟麵包！鴨媽媽可以先吃掉'],
+  kid: ['kid', '小孩在丟麵包！{me}可以先吃掉'],
   bag: ['bottle', '一大波垃圾漂過來了！別讓小鴨被纏住'],
   fisher: ['fisher', '漁夫舉網了！快離開粉紅圈圈']
 };
@@ -1689,7 +1712,7 @@ function spawnHazard(type, diff, bonus) {
   G.hazards.push(new HZ[type](diff, bonus));
   G.lastSpawn = G.t;
   const [ic, tx] = HZ_TXT[type];
-  toast(ic, bonus ? '停太久了，老鷹盯上你們！' : tx, true);
+  toast(ic, bonus ? '停太久了，老鷹盯上你們！' : who(tx), true);
   if (type !== 'eagle' && type !== 'fisher') Snd.alert();
 }
 
@@ -2165,7 +2188,7 @@ function drawDuck(d, isMama) {
   ctx.rotate(Math.sin(G.t * 3 + d.bob) * 0.05 + (d.state === 'tangled' ? Math.sin(G.t * 14) * 0.12 : 0));
   ctx.scale(d.face * sx, sy);
   const expr = d.expr || 'normal';
-  const nm = isMama ? 'mama_' + (expr === 'dizzy' ? 'wow' : expr) : 'duck_' + expr;
+  const nm = isMama ? ROLE + '_' + (expr === 'dizzy' ? 'wow' : expr) : 'duck_' + expr;
   spr(nm, 0, 0, size, size, .5, .76);
   if (!isMama && d.acc) spr('acc_' + d.acc, 0, 0, size, size, .5, .76);
   if (d.bag) { ctx.globalAlpha = alpha * 0.92; spr(d.bag, -2, -size * 0.22, size * 0.9, size * 0.9); ctx.globalAlpha = alpha; }
@@ -2262,23 +2285,23 @@ function duckImgHTML(acc, expr, size, cls = '') {
   const s = size ? `width:${size}px;height:${size}px` : '';
   return `<span class="duckimg ${cls}" style="${s}"><img src="${URLS['duck_' + expr]}" alt="">${acc ? `<img src="${URLS['acc_' + acc]}" alt="">` : ''}</span>`;
 }
-function mamaImgHTML(expr, size) { return `<span class="duckimg" style="width:${size}px;height:${size}px"><img src="${URLS['mama_' + expr]}" alt=""></span>`; }
+function mamaImgHTML(expr, size, role = ROLE) { return `<span class="duckimg" style="width:${size}px;height:${size}px"><img src="${URLS[role + '_' + expr]}" alt=""></span>`; }
 function showScreen(id) { for (const s of ['#titleScr', '#pauseScr', '#resultScr', '#shareScr']) $(s).classList.toggle('hidden', s !== id); }
 
 // ending lines per tier; {a} / {b} are filled with the names of ducklings that didn't make it home
 const TITLES = [
-  [15, ['完美鴨媽媽，一隻都沒少！', '15 隻全員到齊，今晚加菜！', '點名：一、二、三……十五！一隻不少！', '鴨爸爸感動到哭：「你是怎麼辦到的？」']],
-  [10, ['還不錯，有幾隻在路上玩到忘了回家', '鴨爸爸數了兩次：「咦？是不是少了幾隻？」', '差一點點就全員到齊了！', '{a}大概又跑去吃麵包了吧……', '晚餐多煮了幾碗，有點浪費']],
-  [5, ['鴨爸爸問你孩子們呢', '鴨爸爸：「{a}呢？{b}呢？」', '剩下的孩子應該……會自己游回來吧？', '家裡突然變得好安靜', '鴨奶奶已經打電話去報警了']],
-  [1, ['至少還有一隻愛你', '回家路上好像掉了什麼……喔，是孩子', '鴨爸爸默默拿著手電筒去河邊找人了', '「媽媽，其他人呢？」「……先吃飯。」']],
-  [0, ['你是不是根本沒在顧小孩', '鴨媽媽一個人回家，鴨爸爸傻眼', '呃……是不是忘了什麼？15 個孩子之類的', '今天的晚餐好像特別多']]
+  [15, ['完美{me}，一隻都沒少！', '15 隻全員到齊，今晚加菜！', '點名：一、二、三……十五！一隻不少！', '{mate}感動到哭：「你是怎麼辦到的？」']],
+  [10, ['還不錯，有幾隻在路上玩到忘了回家', '{mate}數了兩次：「咦？是不是少了幾隻？」', '差一點點就全員到齊了！', '{a}大概又跑去吃麵包了吧……', '晚餐多煮了幾碗，有點浪費']],
+  [5, ['{mate}問你孩子們呢', '{mate}：「{a}呢？{b}呢？」', '剩下的孩子應該……會自己游回來吧？', '家裡突然變得好安靜', '鴨奶奶已經打電話去報警了']],
+  [1, ['至少還有一隻愛你', '回家路上好像掉了什麼……喔，是孩子', '{mate}默默拿著手電筒去河邊找人了', '「{call}，其他人呢？」「……先吃飯。」']],
+  [0, ['你是不是根本沒在顧小孩', '{me}一個人回家，{mate}傻眼', '呃……是不是忘了什麼？15 個孩子之類的', '今天的晚餐好像特別多']]
 ];
 function titleFor(n) {
   const pool = TITLES.find(t => n >= t[0])[1];
   const miss = G ? shuffle(G.ducks.filter(d => !(G.savedIds && G.savedIds.has(d.id))).map(d => d.name)) : [];
   let line = pool[(R() * pool.length) | 0];
   if (/\{a\}/.test(line) && !miss.length) line = pool[0];
-  return line.replace('{a}', miss[0] || '').replace('{b}', miss[1] || miss[0] || '');
+  return who(line.replace('{a}', miss[0] || '').replace('{b}', miss[1] || miss[0] || ''));
 }
 function fmtTime(s) { s = Math.round(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 
@@ -2323,7 +2346,7 @@ async function share() {
   const n = G ? G.saved : 0;
   const url = location.href.split('?')[0].split('#')[0];
   const text = resultLines().share;
-  if (navigator.share) { try { await navigator.share({ title: '鴨媽媽回家', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+  if (navigator.share) { try { await navigator.share({ title: GAME(), text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
   const full = text + '\n' + url;
   let ok = false;
   try { await navigator.clipboard.writeText(full); ok = true; } catch (e) {
@@ -2336,13 +2359,13 @@ async function share() {
 let shareBlob = null, shareURL = null;
 function resultLines() {
   const n = G.saved, fell = G.mamaFall, late = G.timeUp;
-  if (fell) return { n, fell, late, ribbon: 'THE END', title: '喔喔～是沒在看路嗎？', note: '鴨媽媽帶著全家一起坐了瀑布溜滑梯……下次記得靠左邊的小水道！', foot: '全家坐了瀑布溜滑梯',
-    share: '我在《鴨媽媽回家》帶著全家衝下瀑布了……\n「喔喔～是沒在看路嗎？」\n你能平安到家嗎？' };
+  if (fell) return { n, fell, late, ribbon: 'THE END', title: '喔喔～是沒在看路嗎？', note: ME() + '帶著全家一起坐了瀑布溜滑梯……下次記得靠左邊的小水道！', foot: '全家坐了瀑布溜滑梯',
+    share: `我在《${GAME()}》帶著全家衝下瀑布了……\n「喔喔～是沒在看路嗎？」\n你能平安到家嗎？` };
   if (late) return { n, fell, late, ribbon: '時間到！', title: G.lateLine, note: `還有 ${n} 隻跟在身邊，可是 2 分鐘內沒趕到農舍……`, foot: '沒趕上晚餐',
-    share: `我在《鴨媽媽回家》帶著 ${n} 隻小鴨……結果時間到了！\n「${G.lateLine}」\n你能 2 分鐘內到家嗎？` };
+    share: `我在《${GAME()}》帶著 ${n} 隻小鴨……結果時間到了！\n「${G.lateLine}」\n你能 2 分鐘內到家嗎？` };
   if (!G.homeLine) G.homeLine = titleFor(n);
   return { n, fell, late, ribbon: '回到農舍了！', title: G.homeLine, note: null, foot: '你能一隻都不少嗎？',
-    share: `我在《鴨媽媽回家》帶了 ${n}/15 隻小鴨回家！\n稱號：「${G.homeLine}」\n你能一隻都不少嗎？` };
+    share: `我在《${GAME()}》帶了 ${n}/15 隻小鴨回家！\n稱號：「${G.homeLine}」\n你能一隻都不少嗎？` };
 }
 function makeShareImage() {
   const WI = 1080, HI = 1350, c = document.createElement('canvas'); c.width = WI; c.height = HI;
@@ -2370,7 +2393,7 @@ function makeShareImage() {
   g.save(); g.translate(WI / 2, 64); g.rotate(-0.04); g.fillStyle = 'rgba(239,224,173,.92)'; g.fillRect(-120, -26, 240, 52); g.restore();
   // title tiles
   const cols = [C.red, C.mus, C.teal, C.blue, C.green];
-  '鴨媽媽回家'.split('').forEach((ch, i) => {
+  GAME().split('').forEach((ch, i) => {
     const x = WI / 2 + (i - 2) * 132, y = 210 + (i % 2) * 8;
     g.save(); g.translate(x, y); g.rotate([-0.1, 0.07, -0.05, 0.08, -0.08][i]);
     g.fillStyle = 'rgba(58,42,32,.25)'; rr(-52, -54, 112, 118, 22); g.fill();
@@ -2385,7 +2408,7 @@ function makeShareImage() {
   g.textAlign = 'center'; g.textBaseline = 'alphabetic';
   g.save(); g.translate(WI / 2 - 50, 540); g.rotate(-0.06); g.fillStyle = 'rgba(58,42,32,.15)'; g.font = F(220); g.fillText(String(n), 8, 8); g.fillStyle = C.red; g.fillText(String(n), 0, 0); g.restore();
   g.fillStyle = INK; g.font = F(64); g.textAlign = 'left'; g.fillText('/ 15 隻', WI / 2 + 30 + (n >= 10 ? 60 : 10), 530);
-  sp(fell ? 'mama_wow' : late ? 'mama_sad' : 'mama_happy', 225, 460, 170, 170);
+  sp(ROLE + (fell ? '_wow' : late ? '_sad' : '_happy'), 225, 460, 170, 170);
   // title sticky note (wrap)
   g.font = F(50); g.textAlign = 'center';
   const lines = []; let cur = '';
@@ -2408,7 +2431,7 @@ function makeShareImage() {
   g.font = F(36); g.textAlign = 'center'; g.fillStyle = '#7a6250';
   g.fillText(`用時 ${fmtTime(G.stats.time)}　救回 ${G.stats.rescues} 次　${foot}`, WI / 2, gy0 + 450);
   g.fillStyle = '#fbf6ea'; g.font = F(34);
-  g.fillText(location.host ? location.host + location.pathname : '鴨媽媽回家', WI / 2, HI - 16);
+  g.fillText(location.host ? location.host + location.pathname : GAME(), WI / 2, HI - 16);
   return new Promise(res => c.toBlob(b => res(b), 'image/png'));
 }
 async function openShareSheet() {
@@ -2425,7 +2448,7 @@ async function shareImage() {
   const file = new File([shareBlob], 'duck-home.png', { type: 'image/png' });
   const text = resultLines().share.replace(/\n/g, ' ');
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: '鴨媽媽回家', text }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.share({ files: [file], title: GAME(), text }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
   }
   const a = document.createElement('a'); a.href = shareURL; a.download = 'duck-home.png'; document.body.appendChild(a); a.click(); a.remove();
   tip('圖片已下載；也可以長按上面的圖存到相簿');
@@ -2445,7 +2468,7 @@ cvs.addEventListener('pointerdown', e => {
   if (!G.started) { G.started = true; $('#hint').classList.add('hidden'); }
   // tap a duck → quack
   const wx = pointer.sx / scale, wy = pointer.sy / scale + camY, m = G.mama;
-  if (hyp(wx - m.x, wy - (m.y - 12)) < 26) { m.quack = 0.45; Snd.quack(1, 2); burst(m.x, m.y - 30, 'heart', 3, 40); buzz(10); return; }
+  if (hyp(wx - m.x, wy - (m.y - 12)) < 26) { m.quack = 0.45; Snd.quack(ROLE === 'papa' ? 0.82 : 1, 2); burst(m.x, m.y - 30, 'heart', 3, 40); buzz(10); return; }
   let best = null, bd = 20;
   for (const d of G.ducks) { if (d.state === 'gone' || d.state === 'carried' || d.state === 'netted') continue; const dd = hyp(wx - d.x, wy - (d.y - 8)); if (dd < bd) { bd = dd; best = d; } }
   if (best && best.quack <= 0) { best.quack = 0.45; Snd.quack(1.55, 2); burst(best.x, best.y - 20, 'heart', 2, 30); buzz(8); }
@@ -2456,8 +2479,21 @@ cvs.addEventListener('pointerup', up); cvs.addEventListener('pointercancel', up)
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
 
-$('#btnStart').addEventListener('click', startGame);
+function setRole(r) {
+  ROLE = r === 'papa' ? 'papa' : 'mama'; store.set('duckHome.role', ROLE);
+  const t = $('#titleTiles').children; t[1].textContent = t[2].textContent = ROLE === 'papa' ? '爸' : '媽';
+  document.querySelectorAll('.me').forEach(e => e.textContent = ME());
+  document.title = GAME();
+  if (S.mama_normal) {
+    $('#progMama').src = URLS[ROLE + '_normal']; $('#howA').src = URLS[ROLE + '_happy'];
+    $('#logo').innerHTML = mamaImgHTML('happy', 72) + duckImgHTML('bow', 'happy', 42) + duckImgHTML('party', 'normal', 42) + duckImgHTML('glasses', 'happy', 42);
+    $('#logoP').innerHTML = mamaImgHTML('normal', 60) + duckImgHTML('beanie', 'normal', 38) + duckImgHTML('flower', 'happy', 38);
+  }
+  $('#btnMama').classList.toggle('last', ROLE === 'mama'); $('#btnPapa').classList.toggle('last', ROLE === 'papa');
+}
+for (const id of ['#btnMama', '#btnPapa']) $(id).addEventListener('click', e => { setRole(e.currentTarget.dataset.role); startGame(); });
 $('#btnAgain').addEventListener('click', startGame);
+$('#btnHome').addEventListener('click', () => { Snd.click(); refreshBest(); setRole(ROLE); newGame(); mode = 'title'; showScreen('#titleScr'); });
 $('#btnRestart').addEventListener('click', startGame);
 $('#btnResume').addEventListener('click', () => { Snd.click(); resumeGame(); });
 $('#btnPause').addEventListener('click', () => { Snd.click(); pauseGame(); });
@@ -2495,13 +2531,11 @@ function frame(now) {
   Snd.muted = !!store.get('duckHome.muted', false); Snd.musicMuted = !!store.get('duckHome.musicOff', false); syncMute();
   await buildSprites();
   $('#hudDuck').src = URLS.duck_happy; $('#hudDuckAcc').src = URLS.acc_bow;
-  $('#progMama').src = URLS.mama_normal;
+  $('#riMama').innerHTML = `<img src="${URLS.mama_happy}" alt="">`; $('#riPapa').innerHTML = `<img src="${URLS.papa_happy}" alt="">`;
   $('#progHouse').src = svgURL(SV('0 0 40 36', `<path d="M3 17 L9 8 L20 4 L31 8 L37 17Z" fill="#9d2f2b" stroke="${C.cream}" stroke-width="1.6" stroke-linejoin="round"/><rect x="6" y="16" width="28" height="18" fill="${C.red}"/><rect x="14" y="21" width="12" height="13" fill="#c4443f" stroke="${C.cream}" stroke-width="1.6"/><path d="M15 22 L25 33 M25 22 L15 33" stroke="${C.cream}" stroke-width="1.6"/><path d="M20 4 L20 0" stroke="${INK}" stroke-width="1.2"/>`));
   $('#lostImg').src = URLS.duck_sad;
-  $('#howA').src = URLS.mama_happy; $('#howB').src = URLS.eagle; $('#howC').src = URLS.duck_sad; $('#howD').src = URLS.icoFall;
-  const logo = mamaImgHTML('happy', 72) + duckImgHTML('bow', 'happy', 42) + duckImgHTML('party', 'normal', 42) + duckImgHTML('glasses', 'happy', 42);
-  $('#logo').innerHTML = logo;
-  $('#logoP').innerHTML = mamaImgHTML('normal', 60) + duckImgHTML('beanie', 'normal', 38) + duckImgHTML('flower', 'happy', 38);
+  $('#howB').src = URLS.eagle; $('#howC').src = URLS.duck_sad; $('#howD').src = URLS.icoFall;
+  setRole(store.get('duckHome.role', 'mama'));
   refreshBest();
   newGame();
   window.__duck = { get G() { return G; }, pointer, get camY() { return camY; }, get VH() { return VH; }, get scale() { return scale; }, start: startGame, URLS, L, WF_START, WF_END, WF_X, bankL, bankR };
