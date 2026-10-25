@@ -61,6 +61,8 @@ canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch
   background-image:repeating-linear-gradient(-55deg,rgba(255,255,255,.35) 0 2px,transparent 2px 6px)}
 .track .mk{position:absolute;top:-1px;left:0;width:30px;height:30px;transform:translate(-50%,-62%)}
 .prog .home{width:30px;height:28px;margin-left:4px}
+#timer{margin-left:8px;font-size:16px;color:var(--ink);min-width:34px;text-align:right;transition:transform .2s}
+#timer.hurry{color:var(--red);animation:wiggle .6s ease-in-out infinite}
 .icon-btn.off{opacity:.55}
 .icon-btn{width:40px;height:40px;flex:none;border:none;padding:0;display:grid;place-items:center;cursor:pointer;color:var(--ink);
   border-radius:48% 52% 50% 46% / 52% 46% 54% 48%;background-color:var(--paper);background-image:var(--grain);box-shadow:var(--shadow);
@@ -177,7 +179,7 @@ canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch
   <div id="hud" class="hidden">
     <div class="row">
       <div class="pill"><span class="ic"><img id="hudDuck" alt=""><img id="hudDuckAcc" alt=""></span><b id="cnt">15</b><small>/15</small></div>
-      <div class="prog"><div class="track"><div class="fill" id="progFill"></div><img class="mk" id="progMama" alt=""></div><img class="home" id="progHouse" alt=""></div>
+      <div class="prog"><div class="track"><div class="fill" id="progFill"></div><img class="mk" id="progMama" alt=""></div><span id="timer">2:00</span><img class="home" id="progHouse" alt=""></div>
       <button class="icon-btn" id="btnPause" aria-label="暫停">
         <svg viewBox="0 0 24 24"><rect x="6" y="5" width="4.2" height="14" rx="2" fill="currentColor"/><rect x="13.8" y="5" width="4.2" height="14" rx="2" fill="currentColor"/></svg>
       </button>
@@ -211,7 +213,7 @@ canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch
         <li><img id="howA" alt=""><span><b>按住拖曳</b>：鴨媽媽跟著手指游，小鴨排隊跟上</span></li>
         <li><img id="howB" alt=""><span><b>放開手指</b>：大家停下喘口氣，但水流會往回推、老鷹也會盯上</span></li>
         <li><img id="howC" alt=""><span><b>掉隊的小鴨</b>：游回去碰牠一下，就會重新跟上</span></li>
-        <li><img id="howD" alt=""><span>沿路危險隨機出現，最後的<b>瀑布</b>記得走左邊小水道</span></li>
+        <li><img id="howD" alt=""><span><b>限時 2 分鐘</b>趕回家吃晚餐！危險每次都不一樣，最後還有<b>瀑布</b></span></li>
       </ul>
       <div class="best" id="bestTitle">最佳紀錄：還沒有</div>
       <button class="btn" id="btnStart">出發囉！</button>
@@ -275,7 +277,10 @@ const L = 6000;                     // river length (progress to the farm)
 const WF_START = L - 1150;          // waterfall zone (progress)
 const WF_END = L - 540;
 const WF_X = 314;                   // waterfall lip x
-const FORK_A = 2550, FORK_B = 3250; // river splits around an island (progress)
+let FORK_A = 2550, FORK_B = 3250;   // river splits around an island (progress) — re-rolled every game
+let RIV = [1.3, 0.4, 2.1, 1.7];      // river-bank wiggle phases — re-rolled every game
+let WF_SPITS = [70, 250, 430];       // where the mud spits poke out in the waterfall zone
+const TIME_LIMIT = 120;              // seconds to get home before dinner
 const CUR = 24;                     // river current (units/s, downstream = +y)
 const MAMA_SPD = 150, DUCK_SPD = 190, GAP = 17;
 const N_DUCKS = 15;
@@ -293,17 +298,17 @@ function hash(a, b) { let h = (a * 374761393 + b * 668265263) | 0; h = Math.imul
 
 /* ---------------- river geometry ---------------- */
 // mud spits poking out from the left bank in the waterfall zone: you must swing out toward the lip to get round them
-function wfBumps(p) { let b = 0; for (const c of [WF_START + 70, WF_START + 250, WF_START + 430]) b += 150 * Math.exp(-Math.pow((p - c) / 56, 2)); return b; }
+function wfBumps(p) { let b = 0; for (const c of WF_SPITS) b += 150 * Math.exp(-Math.pow((p - c) / 56, 2)); return b; }
 function forkWiden(p) { return 24 * smooth(FORK_A - 220, FORK_A, p) * (1 - smooth(FORK_B, FORK_B + 220, p)); }
 function bankL(y) {
   const p = -y;
-  let b = 40 + 13 * Math.sin(p * 0.0034 + 1.3) + 7 * Math.sin(p * 0.0097 + 0.4);
+  let b = 40 + 13 * Math.sin(p * 0.0034 + RIV[0]) + 7 * Math.sin(p * 0.0097 + RIV[1]);
   const k = smooth(WF_START - 300, WF_START - 60, p);
   return b * (1 - k) + 48 * k - forkWiden(p) + wfBumps(p);
 }
 function bankR(y) {
   const p = -y;
-  let b = 320 - 13 * Math.sin(p * 0.0031 + 2.1) - 7 * Math.sin(p * 0.0089 + 1.7);
+  let b = 320 - 13 * Math.sin(p * 0.0031 + RIV[2]) - 7 * Math.sin(p * 0.0089 + RIV[3]);
   const kIn = smooth(WF_START - 220, WF_START, p);
   const kOut = smooth(WF_END, WF_END + 190, p);
   b = b * (1 - kIn) + 376 * kIn;
@@ -822,14 +827,14 @@ function buildSchedule() {
   while (p < end) {
     const f = p / end;
     let t;
-    if (first) { t = EASY[(R() * EASY.length) | 0]; first = false; }
+    if (first) { t = R() < .5 ? EASY[(R() * EASY.length) | 0] : TYPES[(R() * TYPES.length) | 0]; first = false; }
     else {
       if (!bag.length) bag = shuffle(TYPES.slice());
       t = bag.pop();
       if ((t === last || (list.length > 1 && list[list.length - 2].type === t)) && bag.length) { const u = bag.pop(); bag.unshift(t); t = u; }
     }
     list.push({ p, type: t }); last = t;
-    p += lerp(400, 240, f) * rand(0.85, 1.15);
+    p += lerp(400, 240, f) * (R() < 0.25 ? rand(0.45, 0.65) : rand(0.8, 1.45));   // sometimes a quick double, sometimes a breather
   }
   return list;
 }
@@ -890,7 +895,13 @@ function buildDeco() {
   return D;
 }
 
+function rollWorld() {
+  FORK_A = Math.round(rand(1250, 3150)); FORK_B = FORK_A + 700;
+  RIV = [rand(0, 6.28), rand(0, 6.28), rand(0, 6.28), rand(0, 6.28)];
+  const a = rand(40, 110); WF_SPITS = [WF_START + a, WF_START + a + rand(160, 200), WF_START + a + rand(330, 390)];
+}
 function newGame() {
+  rollWorld();
   const defs = shuffle(DUCK_DEFS.slice());
   G = {
     t: 0, started: false, landing: false, landT: 0, ended: false, saved: 0,
@@ -950,6 +961,24 @@ function rejoin(d) {
   float(d.x, d.y - 18, '+1', '#3f8f55', null, 20);
   if (freed) float(d.x, d.y - 40, '解開了！', '#3f8f55', null, 12);
   burst(d.x, d.y - 8, 'heart', 5, 50); Snd.chime(); buzz(15); G.stats.rescues++; bumpHud();
+}
+const LATE_LINES = ['趕不回去吃晚餐了…鴨爸爸已經先開動了', '天黑了，今晚只好在河邊露營', '太陽下山囉～鴨爸爸打電話來問人在哪', '晚餐涼掉了…下次要游快一點！'];
+function startTimeUp() {
+  const m = G.mama;
+  G.timeUp = true; G.tuT = 0; G.hazards = []; pointer.down = false; G.saved = G.line.length; G.savedIds = new Set(G.line.map(d => d.id)); G.lateLine = LATE_LINES[(R() * LATE_LINES.length) | 0];
+  setExpr(m, 'sad', 99); m.quack = 0.45;
+  float(m.x, m.y - 44, '咦？天黑了！', '#c9792b', null, 16, 1.8);
+  for (const d of G.line) setExpr(d, 'sad', 99);
+  Snd.music(false); Snd.trombone(); buzz([60, 60, 60]);
+  $('#hint').classList.add('hidden');
+}
+function updateTimeUp(dt) {
+  const m = G.mama;
+  G.tuT += dt; G.idle += dt; G.gather = true;
+  updateDucks(dt);
+  if (G.tuT > 3.4 && !G.ended) { G.ended = true; showResult(); }
+  const ty = m.y - VH * 0.6; camY += (ty - camY) * Math.min(1, dt * 4); clampCam();
+  updateFx(dt); G.hintT = 0;
 }
 function startMamaFall() {
   const m = G.mama;
@@ -1691,6 +1720,8 @@ function update(dt) {
   if (Math.abs(m.vx) > 30) m.face = m.vx > 0 ? 1 : -1;
   if (!G.landing && !G.mamaFall && isWF(m.y) && m.x > WF_X) startMamaFall();
   if (G.mamaFall) { updateMamaFall(dt); return; }
+  if (!G.landing && !G.timeUp && G.stats.time >= TIME_LIMIT) startTimeUp();
+  if (G.timeUp) { updateTimeUp(dt); return; }
 
   // idle / gather
   if (G.started && !G.landing) { if (!pointer.down) G.idle += dt; else G.idle = 0; }
@@ -1815,7 +1846,7 @@ function followUpdate(d, dt) {
   const hit = collideSolids(d, 8, false); clampBanks(d, 8, false);
   if (hit && dist > 30 && !G.landing) { d.rockT += dt; if (d.rockT > 0.35) { detach(d, 'lost', '卡住了！'); return; } } else d.rockT = Math.max(0, d.rockT - dt);
   if (dist > 78) d.strain += dt; else d.strain = Math.max(0, d.strain - dt * 1.5);
-  if (d.strain > 0.5 && !G.landing) { detach(d, 'lost', '跟不上了！'); return; }
+  if (d.strain > 0.5 && !G.landing && !G.timeUp) { detach(d, 'lost', '跟不上了！'); return; }
   if (Math.abs(d.vx) > 25) d.face = d.vx > 0 ? 1 : -1;
 }
 function lostUpdate(d, dt) {
@@ -1832,7 +1863,7 @@ function lostUpdate(d, dt) {
   d.x += (d.vx + f[0]) * dt; d.y += (d.vy + f[1] + cur(d) * 0.45) * dt;
   collideSolids(d, 8, false); clampBanks(d, 8, false);
   if (Math.abs(d.vx) > 20) d.face = d.vx > 0 ? 1 : -1;
-  if (d.lock <= 0 && dm < 28 && !G.landing) rejoin(d);
+  if (d.lock <= 0 && dm < 28 && !G.landing && !G.timeUp) rejoin(d);
 }
 function updateFx(dt) {
   for (const f of G.floats) f.t += dt;
@@ -1889,13 +1920,24 @@ function render() {
 
   drawParts(); drawFloats(); drawIndicators(); drawIdleHint();
   if (G.mamaFall && G.mfT > 1.5) drawTheEnd(clamp((G.mfT - 1.5) / 0.6, 0, 1));
+  // dusk creeps in during the last 30 seconds
+  if (G.started && mode === 'play') {
+    const rem = TIME_LIMIT - G.stats.time, a = G.timeUp ? 0.85 : rem < 30 ? (1 - rem / 30) * 0.75 : 0;
+    if (a > 0) {
+      ctx.save(); ctx.globalCompositeOperation = 'soft-light';
+      const gr = ctx.createLinearGradient(0, camY, 0, camY + VH); gr.addColorStop(0, `rgba(255,90,60,${a})`); gr.addColorStop(1, `rgba(255,150,40,${a})`);
+      ctx.fillStyle = gr; ctx.fillRect(0, camY - 10, W, VH + 20); ctx.restore();
+      ctx.fillStyle = `rgba(255,178,120,${a * 0.3})`; ctx.fillRect(0, camY - 10, W, VH + 20);   // warm sunset haze
+    }
+  }
+  if (G.timeUp && G.tuT > 0.8) drawTheEnd(clamp((G.tuT - 0.8) / 0.6, 0, 1), '時間到！');
 }
-function drawTheEnd(u) {
-  const word = 'THE END', cols = [C.red, C.mus, C.teal, null, C.blue, C.green, C.red], cx = W / 2, cy = camY + VH * 0.4;
+function drawTheEnd(u, word = 'THE END') {
+  const pal = [C.red, C.mus, C.teal, C.blue, C.green], cols = [...word].map((ch, i) => pal[i % 5]), cx = W / 2, cy = camY + VH * 0.4, n = word.length, gap = /[A-Z ]/.test(word) ? 41 : 52;
   ctx.save(); ctx.globalAlpha = u;
   for (let i = 0; i < word.length; i++) {
     if (word[i] === ' ') continue;
-    const x = cx + (i - 3) * 41, d = clamp(u * 1.6 - i * 0.08, 0, 1), y = cy + (1 - d) * -40 + Math.sin(G.t * 3 + i) * 2, rot = (hash(i, 9) - .5) * 0.3;
+    const x = cx + (i - (n - 1) / 2) * gap, d = clamp(u * 1.6 - i * 0.08, 0, 1), y = cy + (1 - d) * -40 + Math.sin(G.t * 3 + i) * 2, rot = (hash(i, 9) - .5) * 0.3;
     ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalAlpha = u * d;
     ctx.fillStyle = 'rgba(58,42,32,.28)'; rrect(-19, -21, 40, 46, 7); ctx.fill();
     ctx.fillStyle = cols[i]; rrect(-21, -24, 40, 46, 7); ctx.fill(); grain();
@@ -2196,7 +2238,7 @@ function drawIdleHint() {
 }
 
 /* ---------------- HUD / UI ---------------- */
-let lastCnt = -1, lastLost = -1;
+let lastCnt = -1, lastLost = -1, lastRem = -1;
 function bumpHud() { const b = $('#cnt'); b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump'); setTimeout(() => b.classList.remove('bump'), 250); }
 function updateHud() {
   if (!G) return;
@@ -2205,6 +2247,8 @@ function updateHud() {
   const lost = G.ducks.filter(d => d.state === 'lost' || d.state === 'tangled' || d.state === 'lured' || d.state === 'spin').length;
   if (G.landing && lost) $('#lostTag').classList.add('hidden');
   else if (lost !== lastLost) { $('#lostN').textContent = lost; $('#lostTag').classList.toggle('hidden', lost === 0 || G.landing); lastLost = lost; }
+  const rem = Math.max(0, Math.ceil(TIME_LIMIT - G.stats.time));
+  if (rem !== lastRem) { lastRem = rem; const t = $('#timer'); t.textContent = fmtTime(rem); t.classList.toggle('hurry', rem <= 20 && !G.landing); }
   const f = clamp(-G.mama.y / L, 0, 1);
   $('#progFill').style.width = (f * 100) + '%'; $('#progMama').style.left = (f * 100) + '%';
 }
@@ -2228,18 +2272,18 @@ function fmtTime(s) { s = Math.round(s); return Math.floor(s / 60) + ':' + Strin
 function showResult() {
   mode = 'end'; Snd.music(false); Snd.setRumble(0);
   const n = G.saved, best = store.get('duckHome.best', null);
-  const isNew = !G.mamaFall && (!best || n > best.n || (n === best.n && G.stats.time < best.time));
+  const isNew = !G.mamaFall && !G.timeUp && (!best || n > best.n || (n === best.n && G.stats.time < best.time));
   if (isNew) store.set('duckHome.best', { n, time: G.stats.time });
   const b = store.get('duckHome.best', null);
-  const fell = G.mamaFall;
-  $('#rRibbon').textContent = fell ? 'THE END' : '回到農舍了！';
-  $('#rRibbon').style.backgroundColor = fell ? 'var(--red)' : '';
-  $('#rCount').textContent = n; $('#rTitle').textContent = fell ? '喔喔～是沒在看路嗎？' : titleFor(n);
+  const E = resultLines();
+  $('#rRibbon').textContent = E.ribbon;
+  $('#rRibbon').style.backgroundColor = E.fell ? 'var(--red)' : E.late ? 'var(--mus)' : '';
+  $('#rCount').textContent = n; $('#rTitle').textContent = E.title;
   const saved = G.savedIds || new Set();
   const order = G.ducks.slice().sort((a, c) => (saved.has(c.id) - saved.has(a.id)));
   $('#rGrid').innerHTML = order.map((d, i) => duckImgHTML(d.acc, saved.has(d.id) ? 'happy' : 'sad', 0, saved.has(d.id) ? '' : 'lost').replace('style=""', `style="animation-delay:${i * 0.04}s"`)).join('');
   const miss = G.ducks.filter(d => !saved.has(d.id)).map(d => d.name);
-  $('#rMissing').textContent = fell ? '鴨媽媽帶著全家一起坐了瀑布溜滑梯……下次記得靠左邊的小水道！'
+  $('#rMissing').textContent = E.note ? E.note
     : miss.length ? `沒跟回家的：${miss.join('、')}` : '大家都平安到家，今晚加菜！';
   $('#rStats').innerHTML = `<span>用時 ${fmtTime(G.stats.time)}</span><span>救回 ${G.stats.rescues} 次</span><span>被帶走 ${G.stats.gone.length} 隻</span>`;
   $('#rBest').innerHTML = b ? `最佳紀錄：${b.n} 隻（${fmtTime(b.time)}）${isNew ? '<span class="newrec">新紀錄！</span>' : ''}` : '最佳紀錄：還沒有，平安到家才算喔';
@@ -2255,7 +2299,7 @@ function refreshBest() {
 
 function startGame() {
   Snd.init(); Snd.click();
-  newGame(); mode = 'play'; paused = false; lastCnt = -1; lastLost = -1;
+  newGame(); mode = 'play'; paused = false; lastCnt = -1; lastLost = -1; lastRem = -1;
   showScreen(null); $('#hud').classList.remove('hidden'); $('#hint').classList.remove('hidden');
   Snd.music(true);
 }
@@ -2265,8 +2309,7 @@ function resumeGame() { paused = false; showScreen(null); Snd.music(true); last 
 async function share() {
   const n = G ? G.saved : 0;
   const url = location.href.split('?')[0].split('#')[0];
-  const text = G && G.mamaFall ? `我在《鴨媽媽回家》帶著全家衝下瀑布了……\n「喔喔～是沒在看路嗎？」\n你能平安到家嗎？`
-    : `我在《鴨媽媽回家》帶了 ${n}/15 隻小鴨回家！\n稱號：「${titleFor(n)}」\n你能一隻都不少嗎？`;
+  const text = resultLines().share;
   if (navigator.share) { try { await navigator.share({ title: '鴨媽媽回家', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
   const full = text + '\n' + url;
   let ok = false;
@@ -2279,12 +2322,17 @@ async function share() {
 /* ---------- result picture (for sharing) ---------- */
 let shareBlob = null, shareURL = null;
 function resultLines() {
-  const n = G.saved, fell = G.mamaFall;
-  return { n, fell, title: fell ? '喔喔～是沒在看路嗎？' : titleFor(n), ribbon: fell ? 'THE END' : '回到農舍了！' };
+  const n = G.saved, fell = G.mamaFall, late = G.timeUp;
+  if (fell) return { n, fell, late, ribbon: 'THE END', title: '喔喔～是沒在看路嗎？', note: '鴨媽媽帶著全家一起坐了瀑布溜滑梯……下次記得靠左邊的小水道！', foot: '全家坐了瀑布溜滑梯',
+    share: '我在《鴨媽媽回家》帶著全家衝下瀑布了……\n「喔喔～是沒在看路嗎？」\n你能平安到家嗎？' };
+  if (late) return { n, fell, late, ribbon: '時間到！', title: G.lateLine, note: `還有 ${n} 隻跟在身邊，可是 2 分鐘內沒趕到農舍……`, foot: '沒趕上晚餐',
+    share: `我在《鴨媽媽回家》帶著 ${n} 隻小鴨……結果時間到了！\n「${G.lateLine}」\n你能 2 分鐘內到家嗎？` };
+  return { n, fell, late, ribbon: '回到農舍了！', title: titleFor(n), note: null, foot: '你能一隻都不少嗎？',
+    share: `我在《鴨媽媽回家》帶了 ${n}/15 隻小鴨回家！\n稱號：「${titleFor(n)}」\n你能一隻都不少嗎？` };
 }
 function makeShareImage() {
   const WI = 1080, HI = 1350, c = document.createElement('canvas'); c.width = WI; c.height = HI;
-  const g = c.getContext('2d'), { n, fell, title, ribbon } = resultLines();
+  const g = c.getContext('2d'), { n, fell, late, title, ribbon, foot } = resultLines();
   const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
   const grainFill = () => { if (GRAIN) { g.save(); g.fillStyle = g.createPattern(GRAIN, 'repeat'); g.fill(); g.restore(); } };
   const sp = (name, x, y, w, h) => { const s2 = S[name]; if (!s2) return; const px = s2.pad * w / s2.w, py = s2.pad * h / s2.h; g.drawImage(s2.c, x - w / 2 - px, y - h / 2 - py, w + px * 2, h + py * 2); };
@@ -2317,13 +2365,13 @@ function makeShareImage() {
   });
   // ribbon
   g.save(); g.translate(WI / 2, 335); g.rotate(-0.03);
-  g.fillStyle = fell ? C.red : C.teal; g.beginPath(); g.moveTo(-190, -34); g.lineTo(190, -34); g.lineTo(165, 0); g.lineTo(190, 34); g.lineTo(-190, 34); g.lineTo(-165, 0); g.closePath(); g.fill();
+  g.fillStyle = fell ? C.red : late ? C.mus : C.teal; g.beginPath(); g.moveTo(-190, -34); g.lineTo(190, -34); g.lineTo(165, 0); g.lineTo(190, 34); g.lineTo(-190, 34); g.lineTo(-165, 0); g.closePath(); g.fill();
   g.fillStyle = C.cream; g.font = F(40); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ribbon, 0, 2); g.restore();
   // score
   g.textAlign = 'center'; g.textBaseline = 'alphabetic';
   g.save(); g.translate(WI / 2 - 50, 540); g.rotate(-0.06); g.fillStyle = 'rgba(58,42,32,.15)'; g.font = F(220); g.fillText(String(n), 8, 8); g.fillStyle = C.red; g.fillText(String(n), 0, 0); g.restore();
   g.fillStyle = INK; g.font = F(64); g.textAlign = 'left'; g.fillText('/ 15 隻', WI / 2 + 30 + (n >= 10 ? 60 : 10), 530);
-  sp(fell ? 'mama_wow' : 'mama_happy', 225, 460, 170, 170);
+  sp(fell ? 'mama_wow' : late ? 'mama_sad' : 'mama_happy', 225, 460, 170, 170);
   // title sticky note (wrap)
   g.font = F(50); g.textAlign = 'center';
   const lines = []; let cur = '';
@@ -2344,7 +2392,7 @@ function makeShareImage() {
   });
   // footer
   g.font = F(36); g.textAlign = 'center'; g.fillStyle = '#7a6250';
-  g.fillText(`用時 ${fmtTime(G.stats.time)}　救回 ${G.stats.rescues} 次　${fell ? '全家坐了瀑布溜滑梯' : '你能一隻都不少嗎？'}`, WI / 2, gy0 + 450);
+  g.fillText(`用時 ${fmtTime(G.stats.time)}　救回 ${G.stats.rescues} 次　${foot}`, WI / 2, gy0 + 450);
   g.fillStyle = '#fbf6ea'; g.font = F(34);
   g.fillText(location.host ? location.host + location.pathname : '鴨媽媽回家', WI / 2, HI - 16);
   return new Promise(res => c.toBlob(b => res(b), 'image/png'));
@@ -2361,8 +2409,7 @@ async function openShareSheet() {
 async function shareImage() {
   if (!shareBlob) return;
   const file = new File([shareBlob], 'duck-home.png', { type: 'image/png' });
-  const { n, fell, title } = resultLines();
-  const text = fell ? '我在《鴨媽媽回家》帶全家衝下瀑布了……「喔喔～是沒在看路嗎？」' : `我在《鴨媽媽回家》帶了 ${n}/15 隻小鴨回家！「${title}」`;
+  const text = resultLines().share.replace(/\n/g, ' ');
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], title: '鴨媽媽回家', text }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
   }
