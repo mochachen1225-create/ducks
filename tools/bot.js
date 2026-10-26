@@ -7,7 +7,7 @@ const TSV = +process.argv[2] || 4, RUNS = +process.argv[3] || 3, SMART = process
     const errs = []; p.on('pageerror', e => errs.push(e.message));
     await p.goto('file://' + require('path').resolve(__dirname, '../index.html') + '?ts=' + TSV);
     await p.waitForTimeout(800);
-    await p.click('#btnStart');
+    await p.click('#btnMama');
     await p.evaluate(() => {
       window.__log = [];
       const od = window.detach, ot = window.takeDuck, of = window.startFall, sh = window.spawnHazard;

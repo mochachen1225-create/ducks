@@ -333,6 +333,7 @@ function channel(y, side) { const c = islandX(y), hw = islandHW(y); return side 
 function isWF(y) { const p = -y; return p > WF_START - 220 && p < WF_END + 190 && bankR(y) > WF_X + 2; }
 function wfK(y) { const p = -y; return smooth(WF_START - 280, WF_START - 30, p) * (1 - smooth(WF_END - 60, WF_END + 110, p)); }
 function riverR(y) { return isWF(y) ? WF_X - 40 : bankR(y); }  // usable right edge for placing things
+function lipNear(x) { return smooth(WF_X - 125, WF_X - 10, x); }
 function inWater(y) { return y < 52 && y > -L; }
 
 /* ---------------- paper-craft sprites ----------------
@@ -655,7 +656,7 @@ function buildSprites() {
 /* ---------------- sound ---------------- */
 const Snd = {
   ctx: null, master: null, musicG: null, rumbleG: null, muted: false, musicMuted: false, noise: null, musicOn: false, nextNote: 0, step: 0,
-  mood: { hazard: false, tense: false, idle: false },
+  mood: { hazard: false, tense: false, idle: false, danger: false, left: 15 },
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
@@ -742,7 +743,7 @@ const Snd = {
     });
   },
   click() { if (!this.ok()) return; const t = this.ctx.currentTime; this.tone(900, 'sine', t, 0.06, 0.15, 1300); },
-  setRumble(v) { if (this.rumbleG) this.rumbleG.gain.setTargetAtTime(v * 0.35, this.ctx.currentTime, 0.2); },
+  setRumble(v) { if (this.rumbleG) this.rumbleG.gain.setTargetAtTime(v * 0.4, this.ctx.currentTime, 0.2); },
   /* ---- background music: warm marimba + ukulele-ish plucks in F major, with a swing.
      16 bars (A + B ≈ 35 s) and layers that react to the game. ---- */
   music(on) { this.musicOn = on; this.applyMusicGain(); if (on && this.ctx && this.nextNote < this.ctx.currentTime) { this.nextNote = this.ctx.currentTime + 0.1; this.step = 0; } },
@@ -767,9 +768,17 @@ const Snd = {
   schedule() {
     if (!this.ctx || !this.musicOn || this.musicMuted) return;
     const c = this.ctx, hz = n => 440 * Math.pow(2, (n - 69) / 12), M = this.mood;
-    const beat = 60 / (M.tense ? 120 : 106), swing = 0.6, bus = this.musicG;
+    const beat = 60 / (M.danger ? 96 + (5 - M.left) * 14 : M.tense ? 120 : 106), swing = M.danger ? 0.5 : 0.6, bus = this.musicG;
     while (this.nextNote < c.currentTime + 0.35) {
       const t = this.nextNote, st = this.step % 128, bar = st >> 3, e = st & 7, ch = this.BARS[bar];
+      if (M.danger) {
+        // "dun-dun… dun-dun… dun-dun-dun-dun": a low E–F ostinato that speeds up as ducklings go missing, plus a heartbeat
+        const fast = (st >> 4) & 1, play = fast || e % 4 === 0 || e % 4 === 1;
+        if (play) this.dread(hz(e % 2 ? 41 : 40), t, 0.22, bus);
+        if (e === 0 || e === 1) this.kick(t, e ? 0.12 : 0.2, bus);
+        if (e === 6 && fast) this.dread(hz(64 + (bar & 1)), t, 0.05, bus, 0.6);
+        this.nextNote += beat / 2; this.step++; continue;
+      }
       const m = this.MEL[st];
       if (m) this.marimba(hz(m), t, 0.16, bus);
       // ukulele strum on beats 1 and 3 (and the off-beats when things get busy)
@@ -781,6 +790,13 @@ const Snd = {
       if ((M.hazard && e % 4 === 0) || (M.tense && e % 2 === 0)) this.kick(t, M.tense ? 0.22 : 0.16, bus);
       this.nextNote += e % 2 === 0 ? beat * swing : beat * (1 - swing); this.step++;
     }
+  },
+  dread(f, t, vol, bus, dur = 0.22) {
+    const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
+    o.type = 'sawtooth'; o.frequency.value = f; o2.type = 'square'; o2.frequency.value = f / 2;
+    lp.type = 'lowpass'; lp.frequency.setValueAtTime(700, t); lp.frequency.exponentialRampToValueAtTime(180, t + dur); lp.Q.value = 3;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(bus); o.start(t); o2.start(t); o.stop(t + dur + 0.03); o2.stop(t + dur + 0.03);
   },
   marimba(f, t, vol, bus, dur) {
     const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain(), g2 = c.createGain();
@@ -1075,8 +1091,9 @@ function envForce(o, isMama) {
   const k = wfK(o.y);
   if (k > 0 && G.started) {
     const li = o.state === 'follow' ? o.li : 6;
-    fx += k * (isMama ? 42 : 48 + li * 5.4);
-    if (!isMama) fx += k * Math.sin(G.t * 3.1 + (o.id || 0) * 1.9) * 28;
+    const near = lipNear(o.x);   // the closer to the lip, the harder it drags
+    fx += k * (isMama ? 42 : 48 + li * 5.4) * (1 + (isMama ? 0.6 : 0.5) * near);
+    if (!isMama) fx += k * Math.sin(G.t * 3.1 + (o.id || 0) * 1.9) * 28 * (1 + 0.4 * near);
   }
   for (const h of G.static) if (h.force) { const f = h.force(o, isMama); fx += f[0]; fy += f[1]; }
   for (const h of G.hazards) if (h.force) { const f = h.force(o, isMama); fx += f[0]; fy += f[1]; }
@@ -1778,9 +1795,17 @@ function update(dt) {
   G.hazards = G.hazards.filter(h => !h.done);
 
   // music mood
-  { const pp = -m.y; Snd.setMood({ hazard: G.hazards.length > 0, tense: G.started && !G.landing && ((pp > FORK_A - 250 && pp < FORK_B) || (pp > WF_START - 300 && pp < WF_END + 100)), idle: G.started && !G.landing && G.idle > 0.6 }); }
+  { const pp = -m.y; Snd.setMood({ hazard: G.hazards.length > 0, tense: G.started && !G.landing && ((pp > FORK_A - 250 && pp < FORK_B) || (pp > WF_START - 300 && pp < WF_END + 100)), idle: G.started && !G.landing && G.idle > 0.6 && G.line.length >= 5, danger: G.started && !G.landing && G.line.length < 5, left: G.line.length });
+    if (G.started && !G.landing && G.line.length < 5 && !G.dangerWarned) { G.dangerWarned = true; toast('duck_sad', '只剩不到 5 隻了…快回頭救！', true); }
+    if (G.line.length >= 7) G.dangerWarned = false; }
   // waterfall rumble
-  const p = -m.y; Snd.setRumble(G.started && mode === 'play' ? clamp(1 - Math.abs(p - (WF_START + WF_END) / 2) / 700, 0, 1) : 0);
+  const p = -m.y, wk = G.started ? wfK(m.y) : 0, wn = wk * (0.35 + 0.65 * lipNear(m.x));
+  G.shake = wn;   // drives screen shake while the waterfall is pulling at us
+  Snd.setRumble(G.started && mode === 'play' ? Math.min(1.4, clamp(1 - Math.abs(p - (WF_START + WF_END) / 2) / 700, 0, 1) * (0.7 + 0.9 * wn)) : 0);
+  if (wn > 0.35) {
+    G.buzzT = (G.buzzT || 0) - dt; if (G.buzzT <= 0) { G.buzzT = lerp(1.1, 0.45, wn); buzz(Math.round(12 + 20 * wn)); }
+    if (R() < dt * 30 * wn) { const y = m.y + rand(-260, 160); if (isWF(y)) G.parts.push({ x: WF_X - rand(0, 14), y, vx: rand(20, 90), vy: rand(-110, -30), t: 0, life: rand(.5, .9), kind: 'drop', s: rand(.8, 1.6), rot: 0 }); }
+  }
 
   // landing
   if (!G.landing && p >= L - 22) {
@@ -1917,7 +1942,8 @@ function render() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = COL.grass; ctx.fillRect(0, 0, cvs.width, cvs.height);
   if (!G) return;
-  ctx.setTransform(k, 0, 0, k, 0, -camY * k);
+  const sh = G.shake && mode === 'play' && !paused ? G.shake * 2.2 : 0, shx = sh ? (Math.sin(G.t * 53) + Math.sin(G.t * 31)) * sh * 0.5 : 0, shy = sh ? Math.sin(G.t * 47) * sh * 0.5 : 0;
+  ctx.setTransform(k, 0, 0, k, shx * k, (-camY + shy) * k);
   if (GRAIN && !grainPat) grainPat = ctx.createPattern(GRAIN, 'repeat');
   if (grainPat && grainPat.setTransform) grainPat.setTransform(new DOMMatrix().scale(1 / k));
   const top = camY - 10, bot = camY + VH + 10;
