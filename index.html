@@ -746,15 +746,18 @@ const Snd = {
   setRumble(v) { if (this.rumbleG) this.rumbleG.gain.setTargetAtTime(v * 0.4, this.ctx.currentTime, 0.2); },
   /* ---- background music: warm marimba + ukulele-ish plucks in F major, with a swing.
      16 bars (A + B ≈ 35 s) and layers that react to the game. ---- */
-  music(on) { this.musicOn = on; this.applyMusicGain(); if (on && this.ctx && this.nextNote < this.ctx.currentTime) { this.nextNote = this.ctx.currentTime + 0.1; this.step = 0; } },
+  music(on) { this.musicOn = on; if (!on) this.stopDrone(); this.applyMusicGain(); if (on && this.ctx && this.nextNote < this.ctx.currentTime) { this.nextNote = this.ctx.currentTime + 0.1; this.step = 0; } },
   setMusicMuted(m) { this.musicMuted = m; this.applyMusicGain(); },
   setMood(mood) {
     const changed = mood.idle !== this.mood.idle;
+    if (mood.danger && !this.mood.danger && this.musicOn) this.startDrone();
+    if (!mood.danger && this.mood.danger) this.stopDrone();
+    if (mood.danger !== this.mood.danger) { this.mood = mood; this.applyMusicGain(); }
     this.mood = mood; if (changed) this.applyMusicGain();
   },
   applyMusicGain() {
     if (!this.ctx) return;
-    const v = !this.musicOn || this.musicMuted ? 0 : this.mood.idle ? 0.22 : 0.5;   // hush while mama holds her breath
+    const v = !this.musicOn || this.musicMuted ? 0 : this.mood.idle ? 0.22 : this.mood.danger ? 0.6 : 0.5;   // hush while mama holds her breath
     this.musicG.gain.setTargetAtTime(v, this.ctx.currentTime, 0.25);
   },
   MEL: [
@@ -765,18 +768,23 @@ const Snd = {
   BARS: ['F', 'Dm', 'Bb', 'C', 'F', 'Dm', 'Bb', 'C', 'Bb', 'C', 'Am', 'Dm', 'Bb', 'C', 'F', 'F'],
   CHORD: { F: [65, 69, 72], Dm: [62, 65, 69], Bb: [62, 65, 70], C: [64, 67, 72], Am: [64, 69, 72] },
   ROOT: { F: 41, Dm: 38, Bb: 46, C: 48, Am: 45 },
+  MINOR: { 69: 68, 74: 73, 76: 75, 81: 80, 62: 61, 64: 63 },   // F major → F minor-ish for the creepy music box
   schedule() {
     if (!this.ctx || !this.musicOn || this.musicMuted) return;
     const c = this.ctx, hz = n => 440 * Math.pow(2, (n - 69) / 12), M = this.mood;
-    const beat = 60 / (M.danger ? 96 + (5 - M.left) * 14 : M.tense ? 120 : 106), swing = M.danger ? 0.5 : 0.6, bus = this.musicG;
+    const beat = 60 / (M.danger ? 70 + (5 - M.left) * 12 : M.tense ? 120 : 106), swing = M.danger ? 0.5 : 0.6, bus = this.musicG;
     while (this.nextNote < c.currentTime + 0.35) {
       const t = this.nextNote, st = this.step % 128, bar = st >> 3, e = st & 7, ch = this.BARS[bar];
       if (M.danger) {
-        // "dun-dun… dun-dun… dun-dun-dun-dun": a low E–F ostinato that speeds up as ducklings go missing, plus a heartbeat
-        const fast = (st >> 4) & 1, play = fast || e % 4 === 0 || e % 4 === 1;
-        if (play) this.dread(hz(e % 2 ? 41 : 40), t, 0.22, bus);
-        if (e === 0 || e === 1) this.kick(t, e ? 0.12 : 0.2, bus);
-        if (e === 6 && fast) this.dread(hz(64 + (bar & 1)), t, 0.05, bus, 0.6);
+        // horror-movie mode: low E–F ostinato, heartbeat, a broken music box playing our tune in minor, and violin stabs
+        const fear = clamp((5 - M.left) / 5, 0, 1), fast = (st >> 4) & 1 || fear > 0.6;
+        if (fast || e % 4 === 0 || e % 4 === 1) this.dread(hz(e % 2 ? 29 : 28), t, 0.24, bus);
+        if (e % 4 === 0) { this.kick(t, 0.26, bus); this.kick(t + 0.16, 0.16, bus); this.beatAt = t; }   // lub-dub
+        if (e % 2 === 0) {   // music box: the cute melody, half speed, minor, out of tune
+          const mb = this.MEL[(this.boxStep = ((this.boxStep || 0) + 1) % 128)];
+          if (mb) this.musicBox(hz(this.MINOR[mb] || mb) * 2, t, 0.07 + 0.04 * fear, bus);
+        }
+        if (bar % 2 === 1 && e === 3 && R() < 0.5 + 0.4 * fear) this.screech(t, 0.05 + 0.04 * fear, bus);
         this.nextNote += beat / 2; this.step++; continue;
       }
       const m = this.MEL[st];
@@ -790,6 +798,44 @@ const Snd = {
       if ((M.hazard && e % 4 === 0) || (M.tense && e % 2 === 0)) this.kick(t, M.tense ? 0.22 : 0.16, bus);
       this.nextNote += e % 2 === 0 ? beat * swing : beat * (1 - swing); this.step++;
     }
+  },
+  musicBox(f, t, vol, bus) {
+    const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain(), lfo = c.createOscillator(), lg = c.createGain();
+    const det = rand(-35, 35);   // a little out of tune
+    o.type = 'sine'; o.frequency.value = f; o.detune.value = det; o2.type = 'triangle'; o2.frequency.value = f * 2.01; o2.detune.value = det;
+    lfo.frequency.value = 5.5; lg.gain.value = f * 0.012; lfo.connect(lg); lg.connect(o.frequency);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+    const g2 = c.createGain(); g2.gain.value = 0.25; o.connect(g); o2.connect(g2); g2.connect(g); g.connect(bus);
+    o.start(t); o2.start(t); lfo.start(t); o.stop(t + 1.5); o2.stop(t + 1.5); lfo.stop(t + 1.5);
+  },
+  screech(t, vol, bus) {   // "eee! eee! eee!" violin stabs
+    const c = this.ctx;
+    for (let i = 0; i < 3; i++) {
+      const t0 = t + i * 0.17;
+      for (const f of [1975.5, 2093]) {   // B6 against C7: a nasty minor second
+        const o = c.createOscillator(), bp = c.createBiquadFilter(), g = c.createGain();
+        o.type = 'sawtooth'; o.frequency.setValueAtTime(f * 1.03, t0); o.frequency.exponentialRampToValueAtTime(f, t0 + 0.05);
+        bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 6;
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
+        o.connect(bp); bp.connect(g); g.connect(bus); o.start(t0); o.stop(t0 + 0.16);
+      }
+    }
+  },
+  startDrone() {   // low, dissonant, slowly breathing drone under the danger music
+    if (this.drone || !this.ctx) return;
+    const c = this.ctx, t = c.currentTime, lp = c.createBiquadFilter(), g = c.createGain(), lfo = c.createOscillator(), lg = c.createGain();
+    lp.type = 'lowpass'; lp.frequency.value = 260; lp.Q.value = 5;
+    lfo.frequency.value = 0.18; lg.gain.value = 140; lfo.connect(lg); lg.connect(lp.frequency);
+    const oscs = [41.2, 43.65, 58.27, 82.4].map((f, i) => { const o = c.createOscillator(); o.type = i === 3 ? 'triangle' : 'sawtooth'; o.frequency.value = f; o.detune.value = rand(-8, 8); o.connect(lp); o.start(t); return o; });
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 1.8);
+    lp.connect(g); g.connect(this.musicG); lfo.start(t);
+    this.drone = { oscs, lfo, g };
+  },
+  stopDrone() {
+    if (!this.drone) return;
+    const { oscs, lfo, g } = this.drone, t = this.ctx.currentTime;
+    g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, 0.25);
+    oscs.forEach(o => o.stop(t + 1.2)); lfo.stop(t + 1.2); this.drone = null;
   },
   dread(f, t, vol, bus, dur = 0.22) {
     const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
@@ -1969,6 +2015,18 @@ function render() {
 
   drawParts(); drawFloats(); drawIndicators(); drawIdleHint();
   if (G.mamaFall && G.mfT > 1.5) drawTheEnd(clamp((G.mfT - 1.5) / 0.6, 0, 1));
+  // fewer than 5 ducklings: the edges of the screen darken and throb like a heartbeat
+  const dangerNow = G.started && mode === 'play' && !G.landing && !G.mamaFall && !G.timeUp && G.line.length < 5;
+  G.vign = clamp((G.vign || 0) + (dangerNow ? 0.02 : -0.03), 0, 1);
+  if (G.vign > 0) {
+    const fear = clamp((5 - G.line.length) / 5, 0, 1), bpm = 70 + (5 - G.line.length) * 12, ph = (G.t * bpm / 60) % 1;
+    const beat = Math.exp(-ph * 9) + 0.6 * Math.exp(-Math.max(0, ph - 0.16) * 9) * (ph > 0.16 ? 1 : 0);
+    const a = G.vign * (0.62 + 0.2 * fear + 0.16 * beat), sy = VH / W;
+    ctx.save(); ctx.translate(W / 2, camY + VH / 2); ctx.scale(1, sy);   // ellipse that hugs the tall screen
+    const vg = ctx.createRadialGradient(0, 0, W * (0.2 - 0.04 * beat), 0, 0, W * 0.6);
+    vg.addColorStop(0, 'rgba(60,0,14,0)'); vg.addColorStop(0.55, `rgba(60,0,14,${a * 0.5})`); vg.addColorStop(1, `rgba(25,0,6,${a})`);
+    ctx.fillStyle = vg; ctx.fillRect(-W / 2, -W, W, W * 2); ctx.restore();
+  }
   // dusk creeps in during the last 30 seconds
   if (G.started && mode === 'play') {
     const rem = TIME_LIMIT - G.stats.time, a = G.timeUp ? 0.85 : rem < 30 ? (1 - rem / 30) * 0.75 : 0;
